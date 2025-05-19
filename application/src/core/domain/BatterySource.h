@@ -17,6 +17,25 @@ const BatteryConfig defaultBatteryConfig = {
     1.634
 };
 
+const uint8_t MAX_CELLS = 20;
+struct BmsData {
+    uint8_t cellCount = 0;
+    uint16_t cellVoltages[MAX_CELLS];       // in mV
+    uint16_t powerTubeTemp = 0;             // code 0x80
+    uint16_t boxTemp = 0;                   // code 0x81
+    uint16_t batteryTemp = 0;               // code 0x82
+    uint16_t totalVoltage = 0;              // code 0x83 (x0.01V)
+    int16_t currentVal = 0;                 // code 0x84 (x0.01A)
+    uint8_t soc = 0;                        // code 0x85 (%)
+    uint8_t tempSensorCount = 0;            // code 0x86
+    uint16_t cycleCount = 0;                // code 0x87
+    uint32_t cycleCapacity = 0;             // code 0x89 (Ah)
+    uint16_t stringCount = 0;               // code 0x8A
+    uint16_t warningMask = 0;               // code 0x8B
+    uint16_t statusMask = 0;                // code 0x8C
+    uint8_t protocolVersion = 0;            // code 0xC0
+};
+
 class BatterySource
 {
 private:
@@ -28,7 +47,7 @@ private:
     unsigned int batteryConfigMaxPercentage = 60; // switch to solar value
     double batteryConfigMax = 27.00;               // switch to solar value
     double batteryVoltage = 0.00;                 // current battery voltage
-    double batteryPercentage = 0.00;
+    unsigned int batteryPercentage = 0;         // current battery percentage
     double batteryVoltageMin = 20.00;          // voltage for 0%
     double batteryVoltageMax = 29.00;          // voltage for 100%
     const uint64_t peakSurgeDelay = 10000000; // atrasar recuperacao da rede, valor em microsegundos. 1.000.000 = 1s
@@ -40,6 +59,8 @@ private:
     HardwareSerial& rs485 = Serial2;
     bool *updatingFirmware;
 
+    BmsData BMS;
+
     TaskHandle_t batterySensorTaskHandle = NULL;
 
     void funcSensorReadTask();
@@ -47,9 +68,10 @@ private:
     void startSensorReadTask();
     void readBatteryResistorDivisor();
     void readBatteryBMS();
-    void enviarComandoLeitura();
-    bool validarChecksum(uint8_t *data, int len);
-    void interpretarResposta(uint8_t *data);
+
+    bool readAndStore();
+    void sendReadRequest(const uint8_t *regs, size_t regCount);
+    uint16_t calcCRC(const uint8_t *buf, size_t len);
 
 public:
     BatterySource(

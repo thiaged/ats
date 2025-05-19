@@ -1,0 +1,359 @@
+homeassistant/binary_sensor/solar_status/config
+{
+    "name": "Solar Status",
+    "unique_id": "solar_status_ats_thiaged",
+    "state_topic": "casa/solar/status",
+    "device_class": "connectivity",
+    "payload_on": "active",
+    "payload_off": "inactive",
+    "icon": "mdi:solar-power",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/solar_voltage/config
+{
+    "name": "Solar Voltage",
+    "unique_id": "solar_voltage_ats_thiaged",
+    "state_topic": "casa/solar/voltage",
+    "unit_of_measurement": "V",
+    "device_class": "voltage",
+    "icon": "mdi:solar-power",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/binary_sensor/utility_status/config
+{
+    "name": "Utility Status",
+    "unique_id": "utility_status_ats_thiaged",
+    "state_topic": "casa/utility/status",
+    "device_class": "connectivity",
+    "payload_on": "active",
+    "payload_off": "inactive",
+    "icon": "mdi:transmission-tower",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/utility_voltage/config
+{
+    "name": "Utility Voltage",
+    "unique_id": "utility_voltage_ats_thiaged",
+    "state_topic": "casa/utility/voltage",
+    "unit_of_measurement": "V",
+    "device_class": "voltage",
+    "icon": "mdi:transmission-tower",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/battery_voltage/config
+{
+    "name": "Battery Voltage",
+    "unique_id": "battery_voltage_ats_thiaged",
+    "state_topic": "casa/battery/voltage",
+    "unit_of_measurement": "V",
+    "device_class": "voltage",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/binary_sensor/bms_status/config
+{
+    "name": "BMS Status",
+    "unique_id": "bms_status_ats_thiaged",
+    "state_topic": "casa/bms/status",
+    "device_class": "connectivity",
+    "payload_on": "active",
+    "payload_off": "inactive",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/switch/bms_status/config
+{
+    "name": "BMS Status",
+    "unique_id": "bms_status_switch_ats_thiaged",
+    "command_topic": "casa/bms/set",
+    "state_topic": "casa/bms/status",
+    "payload_on": "active",
+    "payload_off": "inactive",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/select/power_source/config
+{
+    "name": "Power Source",
+    "unique_id": "power_source_ats_thiaged",
+    "command_topic": "casa/power_source/set",
+    "state_topic": "casa/power_source/status",
+    "options": [
+        "solar",
+        "utility"
+    ],
+    "icon": "mdi:transmission-tower",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/switch/locked_to_source/config
+{
+    "name": "Power source locked",
+    "unique_id": "locked_to_source_switch_ats_thiaged",
+    "command_topic": "casa/locked_to_source/set",
+    "state_topic": "casa/locked_to_source/status",
+    "payload_on": "active",
+    "payload_off": "inactive",
+    "icon": "mdi:account-lock-open",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/switch/wait_for_sync/config
+{
+    "name": "Transfer after syncronize",
+    "unique_id": "wait_for_sync_switch_ats_thiaged",
+    "command_topic": "casa/wait_for_sync/set",
+    "state_topic": "casa/wait_for_sync/status",
+    "payload_on": "active",
+    "payload_off": "inactive",
+    "icon": "mdi:sine-wave",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/switch/firmware_utility_check/config
+{
+    "name": "Update only with utility on",
+    "unique_id": "firmware_utility_check_switch_ats_thiaged",
+    "command_topic": "casa/firmware_utility_check/set",
+    "state_topic": "casa/firmware_utility_check/status",
+    "payload_on": "active",
+    "payload_off": "inactive",
+    "icon": "mdi:download-lock",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/number/voltage_calibration_uti/config
+{
+    "name": "Calibração voltagem AC utility",
+    "unique_id": "voltage_calibration_uti_number_ats_thiaged",
+    "command_topic": "casa/voltage_calibration_uti/set",
+    "state_topic": "casa/voltage_calibration_uti/status",
+    "icon": "mdi:tune-variant",
+    "mode": "box",
+    "step": 0.001,
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/number/voltage_calibration_sol/config
+{
+    "name": "Calibração voltagem AC solar",
+    "unique_id": "voltage_calibration_sol_number_ats_thiaged",
+    "command_topic": "casa/voltage_calibration_sol/set",
+    "state_topic": "casa/voltage_calibration_sol/status",
+    "icon": "mdi:tune-variant",
+    "mode": "box",
+    "step": 0.001,
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/number/voltage_offset_solar/config
+{
+    "name": "Offset AC Solar",
+    "unique_id": "voltage_offset_solar_number_ats_thiaged",
+    "command_topic": "casa/voltage_offset_solar/set",
+    "state_topic": "casa/voltage_offset_solar/status",
+    "icon": "mdi:tune-variant",
+    "mode": "box",
+    "max": 3300,
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/number/voltage_offset_utility/config
+{
+    "name": "Offset AC Utility",
+    "unique_id": "voltage_offset_utility_number_ats_thiaged",
+    "command_topic": "casa/voltage_offset_utility/set",
+    "state_topic": "casa/voltage_offset_utility/status",
+    "icon": "mdi:tune-variant",
+    "mode": "box",
+    "max": 3300,
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/number/battery_voltage_solar/config
+{
+    "name": "Voltagem para ir para Solar",
+    "unique_id": "battery_voltage_solar_number_ats_thiaged",
+    "command_topic": "casa/battery_voltage_solar/set",
+    "state_topic": "casa/battery_voltage_solar/status",
+    "icon": "mdi:tune-variant",
+    "mode": "box",
+    "step": 0.01,
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/number/battery_voltage_utility/config
+{
+    "name": "Voltagem para ir para Utility",
+    "unique_id": "battery_voltage_utility_number_ats_thiaged",
+    "command_topic": "casa/battery_voltage_utility/set",
+    "state_topic": "casa/battery_voltage_utility/status",
+    "icon": "mdi:tune-variant",
+    "mode": "box",
+    "step": 0.01,
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/number/battery_percentage_solar/config
+{
+    "name": "Porcentagem para ir para Solar",
+    "unique_id": "battery_percentage_solar_number_ats_thiaged",
+    "command_topic": "casa/battery_percentage_solar/set",
+    "state_topic": "casa/battery_percentage_solar/status",
+    "icon": "mdi:tune-variant",
+    "mode": "box",
+    "max": 100,
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/number/battery_percentage_utility/config
+{
+    "name": "Porcentagem para ir para Utility",
+    "unique_id": "battery_percentage_utility_number_ats_thiaged",
+    "command_topic": "casa/battery_percentage_utility/set",
+    "state_topic": "casa/battery_percentage_utility/status",
+    "icon": "mdi:tune-variant",
+    "mode": "box",
+    "max": 100,
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}

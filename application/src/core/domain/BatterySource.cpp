@@ -2,7 +2,8 @@
 
 bool BatterySource::IsLowBattery()
 {
-    if (bmsComunicationOn) {
+    if (bmsComunicationOn)
+    {
         return batteryPercentage < batteryConfigMinPercentage;
     }
 
@@ -31,10 +32,9 @@ void BatterySource::SetBmsComunicationOn(bool value)
     if (changed)
     {
         configPreferences.begin("config", false);
-        configPreferences.putBool("bms-on", value); //maximo 15 char on name
+        configPreferences.putBool("bms-on", value); // maximo 15 char on name
         configPreferences.end();
     }
-
 }
 
 void BatterySource::SetBatteryConfigMin(double value)
@@ -44,7 +44,7 @@ void BatterySource::SetBatteryConfigMin(double value)
     if (changed)
     {
         configPreferences.begin("config", false);
-        configPreferences.putDouble("bMin", value); //maximo 15 char on name
+        configPreferences.putDouble("bMin", value); // maximo 15 char on name
         configPreferences.end();
     }
 }
@@ -56,7 +56,7 @@ void BatterySource::SetBatteryConfigMax(double value)
     if (changed)
     {
         configPreferences.begin("config", false);
-        configPreferences.putDouble("bMax", value); //maximo 15 char on name
+        configPreferences.putDouble("bMax", value); // maximo 15 char on name
         configPreferences.end();
     }
 }
@@ -68,7 +68,7 @@ void BatterySource::SetBatteryConfigMinPercentage(int value)
     if (changed)
     {
         configPreferences.begin("config", false);
-        configPreferences.putInt("bMinPercent", value); //maximo 15 char on name
+        configPreferences.putInt("bMinPercent", value); // maximo 15 char on name
         configPreferences.end();
     }
 }
@@ -80,7 +80,7 @@ void BatterySource::SetBatteryConfigMaxPercentage(int value)
     if (changed)
     {
         configPreferences.begin("config", false);
-        configPreferences.putInt("bMaxPercent", value); //maximo 15 char on name
+        configPreferences.putInt("bMaxPercent", value); // maximo 15 char on name
         configPreferences.end();
     }
 }
@@ -143,7 +143,7 @@ void BatterySource::funcSensorReadTask()
 
 void BatterySource::sensorReadTask(void *pvParameters)
 {
-    BatterySource* instance = static_cast<BatterySource*>(pvParameters);
+    BatterySource *instance = static_cast<BatterySource *>(pvParameters);
 
     if (instance == nullptr)
     {
@@ -157,70 +157,19 @@ void BatterySource::sensorReadTask(void *pvParameters)
         {
             instance->funcSensorReadTask();
         }
-        vTaskDelay((instance->sampleIntervalBattery / 1000) / portTICK_PERIOD_MS); // Aguarda X ms antes de repetir a leitura
-    }
-}
-
-void BatterySource::readBatteryBMS()
-{
-    // Envia o comando para ler tensão e porcentagem da BMS
-    enviarComandoLeitura();
-    delay(150);
-
-    if (bmsComunicationFailures > 5) {
-        SetBmsComunicationOn(false);
-    }
-
-    // Lê e interpreta a resposta
-    if (rs485.available())
-    {
-        uint8_t resposta[30];
-        int bytesRecebidos = rs485.readBytes(resposta, 30);
-
-        if (bytesRecebidos > 0 && validarChecksum(resposta, bytesRecebidos))
+        int delayTime = instance->sampleIntervalBattery / 1000;
+        if (instance->bmsComunicationOn == true)
         {
-            interpretarResposta(resposta);
+            delayTime = 1000; // 1 segundo
         }
-        else
-        {
-            bmsComunicationFailures++;
-            Serial.println("Erro na leitura ou checksum inválido");
-        }
-    } else {
-        bmsComunicationFailures++;
-        Serial.println("Sem resposta da BMS");
+        vTaskDelay(delayTime / portTICK_PERIOD_MS); // Aguarda X ms antes de repetir a leitura
     }
-}
-
-void BatterySource::enviarComandoLeitura()
-{
-    uint8_t comando[] = {0xDD, 0xA5, 0x03, 0x00, 0xFF, 0xFD, 0x77};
-    rs485.write(comando, sizeof(comando));
-    Serial.println("Comando de leitura enviado");
-}
-
-bool BatterySource::validarChecksum(uint8_t *data, int len)
-{
-    // Implemente a lógica de validação de checksum de acordo com a documentação
-    // (soma dos bytes, complemento +1)
-    return true; // Retorne verdadeiro se o checksum for válido
-}
-
-void BatterySource::interpretarResposta(uint8_t *data)
-{
-    uint16_t tensaoRaw = (data[0] << 8) | data[1]; // Converte os dois primeiros bytes para uint16_t
-    uint8_t porcentagemRaw = data[10];             // Lê o 11º byte como porcentagem
-
-    // Converte valores brutos para valores reais de tensão e porcentagem
-    batteryVoltage = tensaoRaw / 100.0; // Dividir por 100 para converter de 10mV para V
-    batteryPercentage = porcentagemRaw; // Porcentagem direto de 0 a 100
 }
 
 BatterySource::BatterySource(
     DynamicAnalogBuffer &pBatteryReadBuffer,
     Preferences &pConfigPreferences,
-    bool *pUpdatingFirmware
-)
+    bool *pUpdatingFirmware)
     : batteryReadBuffer(pBatteryReadBuffer), configPreferences(pConfigPreferences)
 {
     updatingFirmware = pUpdatingFirmware;
@@ -250,13 +199,13 @@ void BatterySource::Init()
 void BatterySource::startSensorReadTask()
 {
     xTaskCreatePinnedToCore(
-        sensorReadTask,        // Função da task
+        sensorReadTask,           // Função da task
         "ReadBatterySensorTask",  // Nome da task
-        4096,                  // Tamanho da stack (bytes)
-        this,                  // Passa a instância como parâmetro
-        2,                     // Prioridade da task
+        4096,                     // Tamanho da stack (bytes)
+        this,                     // Passa a instância como parâmetro
+        2,                        // Prioridade da task
         &batterySensorTaskHandle, // Handle da task (opcional)
-        1                      // Núcleo onde a task será fixada (0 ou 1)
+        1                         // Núcleo onde a task será fixada (0 ou 1)
     );
 }
 
@@ -264,11 +213,137 @@ void BatterySource::readBatteryResistorDivisor()
 {
     // Leitura do valor analógico (entre 0 e 4095)
     int adcValue = analogReadMilliVolts(BATTERY_SENSOR_PIN);
-    if (adcValue < 700) adcValue = 0;
+    if (adcValue < 700)
+        adcValue = 0;
 
     batteryReadBuffer.AddReading(adcValue);
     batteryVoltage = (batteryReadBuffer.GetMean() / 4096.0 * 3.33) * ((BATTERY_SENSOR_R1 + BATTERY_SENSOR_R2) / BATTERY_SENSOR_R2) * batteryConfig.batteryCalibrationValue;
+}
 
+void BatterySource::readBatteryBMS()
+{
+    if (!readAndStore())
+    {
+        Serial.println("Failed to read BMS");
+        bmsComunicationFailures++;
+        if (bmsComunicationFailures > 5)
+        {
+            SetBmsComunicationOn(false);
+        }
+        return;
+    }
+}
+
+bool BatterySource::readAndStore()
+{
+    const uint8_t regs[] = {0x79, 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x89, 0x8A, 0x8B, 0x8C,
+                            0x8E, 0x8F, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99,
+                            0x9A, 0x9B, 0x9C, 0x9D, 0x9E, 0x9F,
+                            0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9,
+                            0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF,
+                            0xB0, 0xB1, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xB9,
+                            0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF, 0xC0};
+    sendReadRequest(regs, sizeof(regs));
+
+    uint8_t hdr[4];
+    if (rs485.readBytes(hdr, 4) != 4 || hdr[0] != 0x4E || hdr[1] != 0x57)
+        return false;
+    uint8_t len = hdr[3];
+    uint8_t buf[128];
+    if (rs485.readBytes(buf, len + 2) != len + 2)
+        return false;
+
+    uint16_t idx = 0;
+    while (idx < len)
+    {
+        uint8_t code = buf[idx++];
+        switch (code)
+        {
+        case 0x79:
+        {
+            BMS.cellCount = buf[idx++];
+            for (uint8_t i = 0; i < BMS.cellCount && i < MAX_CELLS; i++)
+            {
+                BMS.cellVoltages[i] = (buf[idx] << 8) | buf[idx + 1];
+                idx += 2;
+            }
+            break;
+        }
+        case 0x80:
+            BMS.powerTubeTemp = (buf[idx++] << 8) | buf[idx++];
+            break;
+        case 0x81:
+            BMS.boxTemp = (buf[idx++] << 8) | buf[idx++];
+            break;
+        case 0x82:
+            BMS.batteryTemp = (buf[idx++] << 8) | buf[idx++];
+            break;
+        case 0x83:
+            BMS.totalVoltage = (buf[idx++] << 8) | buf[idx++];
+            batteryVoltage = BMS.totalVoltage * 0.01; // Convert to volts
+            break;
+        case 0x84:
+            BMS.currentVal = (buf[idx++] << 8) | buf[idx++];
+            break;
+        case 0x85:
+            BMS.soc = buf[idx++];
+            batteryPercentage = BMS.soc; // Assuming SOC is in percentage
+            break;
+        case 0x86:
+            BMS.tempSensorCount = buf[idx++];
+            break;
+        case 0x87:
+            BMS.cycleCount = (buf[idx++] << 8) | buf[idx++];
+            break;
+        case 0x89:
+            BMS.cycleCapacity = (uint32_t)buf[idx++] << 24 | (uint32_t)buf[idx++] << 16 |
+                                (uint32_t)buf[idx++] << 8 | buf[idx++];
+            break;
+        case 0x8A:
+            BMS.stringCount = (buf[idx++] << 8) | buf[idx++];
+            break;
+        case 0x8B:
+            BMS.warningMask = (buf[idx++] << 8) | buf[idx++];
+            break;
+        case 0x8C:
+            BMS.statusMask = (buf[idx++] << 8) | buf[idx++];
+            break;
+        case 0xC0:
+            BMS.protocolVersion = buf[idx++];
+            break;
+        default:
+            idx += (code >= 0x8E && code <= 0x9F) ? 2 : ((code >= 0xA0 && code <= 0xAF) ? 4 : (code >= 0xB0 && code <= 0xBF) ? 10
+                                                                                                                             : 1);
+            break;
+        }
+    }
+    return true;
+}
+
+void BatterySource::sendReadRequest(const uint8_t *regs, size_t regCount)
+{
+    uint8_t frame[64] = {0};
+    frame[0] = 0x4E;
+    frame[1] = 0x57;
+    frame[2] = 0x00;
+    frame[3] = regCount;
+    memcpy(frame + 8, regs, regCount);
+    uint16_t crc = calcCRC(frame, 8 + regCount);
+    frame[8 + regCount] = crc & 0xFF;
+    frame[9 + regCount] = crc >> 8;
+    rs485.write(frame, 10 + regCount);
+}
+
+uint16_t BatterySource::calcCRC(const uint8_t *buf, size_t len)
+{
+    uint16_t crc = 0xFFFF;
+    for (size_t i = 0; i < len; ++i)
+    {
+        crc ^= buf[i];
+        for (int j = 0; j < 8; j++)
+            crc = (crc & 1) ? (crc >> 1) ^ 0xA001 : crc >> 1;
+    }
+    return crc;
 }
 
 double BatterySource::GetBatteryConfigMin()
@@ -313,7 +388,8 @@ double BatterySource::GetBatteryVoltageMax()
 
 bool BatterySource::IsHighBattery()
 {
-    if (bmsComunicationOn) {
+    if (bmsComunicationOn)
+    {
         return batteryPercentage > batteryConfigMaxPercentage;
     }
 

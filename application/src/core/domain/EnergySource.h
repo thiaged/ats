@@ -30,7 +30,7 @@ protected:
     uint64_t delayRecovery = 10000000; //atrasar recuperacao da rede, valor em microsegundos. 1.000.000 = 1s
     unsigned int sensorValue = 0;
     unsigned int lastSensorValue = 0;
-    float voltageCalibration = 0.202;
+    float voltageCalibration = 0.142;
     float alphaFilter = 0.1;
     unsigned int unstableSamples = 10;
     int countRisingSignal = 0;

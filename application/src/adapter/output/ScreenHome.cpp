@@ -39,22 +39,22 @@ void ScreenHome::drawBattery()
     batterySprite->drawRect(1, 4, 28, 90, COLOR_BATTERY_SYMBOL_BORDER);
 
     // bat energy
-    int level = (battery.GetBmsComunicationOn() == true) ?
-        map(battery.GetBatteryPercentage(), 0, 100, 0, 88) :
+    int level = (battery.GetBms().isConnected == true) ?
+        map(battery.GetBms().soc, 0, 100, 0, 88) :
         map(battery.GetBatteryVoltage() * 100, battery.GetBatteryVoltageMin() * 100, battery.GetBatteryVoltageMax() * 100, 0, 88);
 
-    int linePosMax = (battery.GetBmsComunicationOn() == true) ?
+    int linePosMax = (battery.GetBms().isConnected == true) ?
         88 - map(battery.GetBatteryConfigMaxPercentage(), 0, 100, 0, 88) :
         88 - map(battery.GetBatteryConfigMax() * 100, battery.GetBatteryVoltageMin() * 100, battery.GetBatteryVoltageMax() * 100, 0, 88);
 
-    int linePosMin = (battery.GetBmsComunicationOn() == true) ?
+    int linePosMin = (battery.GetBms().isConnected == true) ?
         88 - map(battery.GetBatteryConfigMinPercentage(), 0, 100, 0, 88) :
         88 - map(battery.GetBatteryConfigMin() * 100, battery.GetBatteryVoltageMin() * 100, battery.GetBatteryVoltageMax() * 100, 0, 88);
     batterySprite->fillRect(2, (5 + 88 - level), 26, level, colorEnergy);
 
     // configs min and max
     batterySprite->drawLine(12, 5 + linePosMax, 40, 5 + linePosMax, TFT_WHITE);
-    if (battery.GetBmsComunicationOn() == true)
+    if (battery.GetBms().isConnected == true)
     {
         batterySprite->drawString(String(battery.GetBatteryConfigMaxPercentage()) + "%", 40, linePosMax, 2);
     }
@@ -64,7 +64,7 @@ void ScreenHome::drawBattery()
     }
 
     batterySprite->drawLine(12, 5 + linePosMin, 40, 5 + linePosMin, TFT_WHITE);
-    if (battery.GetBmsComunicationOn() == true)
+    if (battery.GetBms().isConnected == true)
     {
         batterySprite->drawString(String(battery.GetBatteryConfigMinPercentage()) + "%", 40, linePosMin, 2);
     }

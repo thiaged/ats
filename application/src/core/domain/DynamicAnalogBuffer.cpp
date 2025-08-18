@@ -47,9 +47,11 @@ void DynamicAnalogBuffer::AddReadingAc(int value)
         readingsDraw = readings;
         bufferPos = 0;
 
-        // Atualiza o RMS AC
+        // Atualiza o RMS AC com compensação de histerese
         if (!readings.empty()) {
-            currentRms = std::sqrt(static_cast<float>(sumSquares) / readings.size());
+            float newRms = std::sqrt(sumSquares / readings.size()) / 100.0f;
+            // Suaviza a transição entre valores
+            currentRms = currentRms == 0 ? newRms : (0.7f * currentRms + 0.3f * newRms);
         }
     }
 }

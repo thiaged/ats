@@ -196,6 +196,8 @@ homeassistant/number/voltage_calibration_uti/config
     "icon": "mdi:tune-variant",
     "mode": "box",
     "step": 0.001,
+    "min": 0,
+    "max": 1000,
     "device": {
         "identifiers": [
             "ats-thiaged"
@@ -215,6 +217,8 @@ homeassistant/number/voltage_calibration_sol/config
     "icon": "mdi:tune-variant",
     "mode": "box",
     "step": 0.001,
+    "min": 0,
+    "max": 1000,
     "device": {
         "identifiers": [
             "ats-thiaged"

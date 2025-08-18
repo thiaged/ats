@@ -100,17 +100,15 @@ WaveDirection EnergySource::GetWaveDirection()
 void EnergySource::AddBufferValue(uint16_t value)
 {
     buffer.AddReadingAc(value);
-    tension = (tension < 10) ? (buffer.GetRms() * voltageCalibration) : 0.05 * (buffer.GetRms() * voltageCalibration) + 0.95 * tension;
+    tension = (tension < 10) ? (buffer.GetRms() * voltageCalibration) : 0.02 * (buffer.GetRms() * voltageCalibration) + 0.98 * tension;
 
-    if ((tension < 90.0 || tension > 140) && status == EnergyStatus::ACTIVE) {
+    if ((tension < 90.0 || tension > 150) && status == EnergyStatus::ACTIVE) {
         SetStatus(EnergyStatus::INACTIVE);
     }
 }
 
 void EnergySource::ProcessSensorValue(unsigned int sensorRead)
 {
-    // sensorValue = (sensorValue < 10) ? sensorRead : lround(alphaFilter * sensorRead + (1 - alphaFilter) * sensorValue);
-    // sensorValue = lround(sensorRead / 10) * 10;
     sensorValue = sensorRead;
 
     if (sensorValue > topAdcValue)

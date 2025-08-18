@@ -17,23 +17,29 @@ const BatteryConfig defaultBatteryConfig = {
     1.634
 };
 
-const uint8_t MAX_CELLS = 20;
-struct BmsData {
-    uint8_t cellCount = 0;
-    uint16_t cellVoltages[MAX_CELLS];       // in mV
-    uint16_t powerTubeTemp = 0;             // code 0x80
-    uint16_t boxTemp = 0;                   // code 0x81
-    uint16_t batteryTemp = 0;               // code 0x82
-    uint16_t totalVoltage = 0;              // code 0x83 (x0.01V)
-    int16_t currentVal = 0;                 // code 0x84 (x0.01A)
-    uint8_t soc = 0;                        // code 0x85 (%)
-    uint8_t tempSensorCount = 0;            // code 0x86
-    uint16_t cycleCount = 0;                // code 0x87
-    uint32_t cycleCapacity = 0;             // code 0x89 (Ah)
-    uint16_t stringCount = 0;               // code 0x8A
-    uint16_t warningMask = 0;               // code 0x8B
-    uint16_t statusMask = 0;                // code 0x8C
-    uint8_t protocolVersion = 0;            // code 0xC0
+#define RS485_RX 44
+#define RS485_TX 43
+#define RS485_BAUD 9600
+
+// Comandos para comunicação com a BMS JK
+// Comando para solicitar informações básicas da BMS
+const byte REQUEST_BASIC_INFO[] = {0xDD, 0xA5, 0x03, 0x00, 0xFF, 0xFD, 0x77};
+// Tamanho do comando
+const int REQUEST_BASIC_INFO_SIZE = sizeof(REQUEST_BASIC_INFO);
+
+const int MAX_BUFFER_SIZE = 128;
+
+// Estrutura para armazenar os dados da BMS
+struct BMSData {
+  float totalVoltage = 0.0;
+  float current = 0.0;
+  float power = 0.0;
+  float temperature = 0.0;
+  int soc = 0; // State of Charge (%)
+  int cellCount = 0;
+  float cellVoltages[8] = {0}; // Suporte para até 8 células
+  bool isConnected = false;
+  unsigned long lastResponseTime = 0;
 };
 
 class BatterySource
@@ -56,12 +62,16 @@ private:
     bool bmsComunicationOn = false;
     unsigned int bmsComunicationFailures = 0;
     // esp_timer_handle_t timer_sensor_battery; // TODO: remover timer
-    HardwareSerial& rs485 = Serial2;
+    HardwareSerial& RS485Serial;
     bool *updatingFirmware;
 
-    BmsData BMS;
+    BMSData BMS;
 
     TaskHandle_t batterySensorTaskHandle = NULL;
+
+    int bufferIndex = 0;
+    byte receiveBuffer[MAX_BUFFER_SIZE];
+    unsigned long lastBmsRequestTime = 0;
 
     void funcSensorReadTask();
     static void sensorReadTask(void *pvParameters);
@@ -69,14 +79,15 @@ private:
     void readBatteryResistorDivisor();
     void readBatteryBMS();
 
-    bool readAndStore();
-    void sendReadRequest(const uint8_t *regs, size_t regCount);
-    uint16_t calcCRC(const uint8_t *buf, size_t len);
+    void processReceivedData();
+    void sendCommand(const byte* command, int length);
+    void checkConnectionTimeout();
 
 public:
     BatterySource(
         DynamicAnalogBuffer &pBatteryReadBuffer,
         Preferences &pConfigPreferences,
+        HardwareSerial &pSerial,
         bool *pUpdatingFirmware
     );
     virtual ~BatterySource() = default;
@@ -93,6 +104,7 @@ public:
     uint64_t GetLowBatStarted();
     uint64_t GetPeakSurgeDelay();
     bool GetBmsComunicationOn();
+    BMSData GetBms();
 
     bool IsHighBattery();
 

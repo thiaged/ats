@@ -64,7 +64,7 @@ DynamicAnalogBuffer batteryBufferService = DynamicAnalogBuffer(20, dcOffsetBatte
 DynamicAnalogBuffer solarBufferService = DynamicAnalogBuffer(totalSamples, dcOffsetSolar);
 DynamicAnalogBuffer utilityBufferService = DynamicAnalogBuffer(totalSamples, dcOffsetUtility);
 
-BatterySource battery = BatterySource(batteryBufferService, configPreferences, &updatingFirmware);
+BatterySource battery = BatterySource(batteryBufferService, configPreferences, Serial2, &updatingFirmware);
 DrawManager drawManager = DrawManager(amoled, inSleepMode);
 UtilitySource utilitySource = UtilitySource(configPreferences, utilityBufferService, SourceType::UTILITY_SOURCE_TYPE, ZMPT_UTILITY_PIN);
 SolarSource solarSource = SolarSource(configPreferences, solarBufferService, SourceType::SOLAR_SOURCE_TYPE, ZMPT_SOLAR_PIN);
@@ -190,12 +190,6 @@ void setup() {
 }
 
 void loop() {
-    time_t now = time(nullptr);
-    struct tm *timeinfo = localtime(&now);
-    if (timeinfo->tm_hour == sourceLockResetHour && userSourceLocked)
-    {
-        userSourceLocked = false;
-    }
 
     if (digitalRead(21) == LOW)
     {
@@ -270,6 +264,9 @@ void loop() {
 
     if (millis() - debounceNotify > 5000)
     {
+
+        Serial.println("BMS soc: " + String(battery.GetBms().soc));
+        Serial.println("BMS voltage: " + String(battery.GetBms().totalVoltage));
         debounceNotify = millis();
         String bmsStatus = battery.GetBmsComunicationOn() ? "active" : "inactive";
         if (serverManager.HasWsClients())

@@ -47,11 +47,29 @@ void DynamicAnalogBuffer::AddReadingAc(int value)
         readingsDraw = readings;
         bufferPos = 0;
 
-        // Atualiza o RMS AC com compensação de histerese
-        if (!readings.empty()) {
-            float newRms = std::sqrt(sumSquares / readings.size()) / 100.0f;
-            // Suaviza a transição entre valores
-            currentRms = currentRms == 0 ? newRms : (0.7f * currentRms + 0.3f * newRms);
+        // Improved RMS calculation with better smoothing
+        int readingsSize = readings.size();
+        if (readingsSize > 0) {
+            float newRms = std::sqrt(sumSquares / readingsSize);
+            
+            // Improved smoothing algorithm
+            if (currentRms == 0) {
+                currentRms = newRms;
+            } else {
+                // Adaptive smoothing based on RMS stability
+                float rmsChange = abs(newRms - currentRms) / currentRms;
+                
+                float smoothingFactor;
+                if (rmsChange < 0.02f) { // Very stable RMS
+                    smoothingFactor = 0.85f; // Heavy smoothing
+                } else if (rmsChange < 0.08f) { // Moderately stable
+                    smoothingFactor = 0.70f; // Medium smoothing
+                } else {
+                    smoothingFactor = 0.50f; // Light smoothing for unstable values
+                }
+                
+                currentRms = smoothingFactor * currentRms + (1.0f - smoothingFactor) * newRms;
+            }
         }
     }
 }

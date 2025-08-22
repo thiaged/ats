@@ -37,7 +37,7 @@ Screen::Screen(
 
 void Screen::Render()
 {
-    if (millis() - slowScreenAnim > 200)
+    if ((millis() - slowScreenAnim) > 200)
     {
         slowScreenAnim = millis();
         drawUtilitySource();

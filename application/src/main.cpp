@@ -193,7 +193,7 @@ void loop() {
 
     if (digitalRead(21) == LOW)
     {
-        if (millis() - btnDebunceBacklight > 300) {
+        if ((millis() - btnDebunceBacklight) > 300) {
             btnDebunceBacklight = millis();
             buzzerManager.PlayClickSound();
             inactivityTime = millis();
@@ -203,7 +203,7 @@ void loop() {
     if (digitalRead(SOLAR_BUTTON_PIN) == LOW)
     {
         inactivityTime = millis();
-        if (millis() - btnDebunceSolar > 300) {
+        if ((millis() - btnDebunceSolar) > 300) {
             btnDebunceSolar = millis();
 
             buzzerManager.PlayClickSound();
@@ -223,7 +223,7 @@ void loop() {
     if (digitalRead(UTILITY_BUTTON_PIN) == LOW)
     {
         inactivityTime = millis();
-        if (millis() - btnDebunceUtility > 300) {
+        if ((millis() - btnDebunceUtility) > 300) {
             btnDebunceUtility = millis();
 
             buzzerManager.PlayClickSound();
@@ -250,7 +250,7 @@ void loop() {
 
     if (utilitySource.GetTension() < 90 || utilitySource.GetTension() > 140)
     {
-        if (millis() - ledBlinkTimer > 500)
+        if ((millis() - ledBlinkTimer) > 500)
         {
             ledBlinkTimer = millis();
             ledBlink = !ledBlink;
@@ -262,13 +262,32 @@ void loop() {
 
     screenManager.Render();
 
-    if (millis() - debounceNotify > 5000)
+    // Auto-calibration for better AC tension stability
+    if (!utilitySource.IsCalibrated()) {
+        utilitySource.AutoCalibrateDcOffset();
+    }
+    if (!solarSource.IsCalibrated()) {
+        solarSource.AutoCalibrateDcOffset();
+    }
+
+    if ((millis() - debounceNotify) > 5000)
     {
 
         Serial.println("BMS soc: " + String(battery.GetBms().soc));
         Serial.println("BMS voltage: " + String(battery.GetBms().totalVoltage));
         debounceNotify = millis();
         String bmsStatus = battery.GetBmsComunicationOn() ? "active" : "inactive";
+        
+        // Debug output for AC tension stability monitoring
+        Serial.println("=== AC Tension Stability Debug ===");
+        Serial.println("Utility - Voltage: " + String(utilitySource.GetTension(), 2) + 
+                      "V, ADC: " + String(utilitySource.GetSensorValue()) + 
+                      ", Calibrated: " + (utilitySource.IsCalibrated() ? "Yes" : "No"));
+        Serial.println("Solar - Voltage: " + String(solarSource.GetTension(), 2) + 
+                      "V, ADC: " + String(solarSource.GetSensorValue()) + 
+                      ", Calibrated: " + (solarSource.IsCalibrated() ? "Yes" : "No"));
+        Serial.println("==================================");
+        
         if (serverManager.HasWsClients())
         {
             debounceNotify = millis();
@@ -307,7 +326,7 @@ void loop() {
         serverManager.SendToMqtt("casa/battery_percentage_solar/status", String(battery.GetBatteryConfigMaxPercentage()).c_str());
         serverManager.SendToMqtt("casa/battery_percentage_utility/status", String(battery.GetBatteryConfigMinPercentage()).c_str());
 
-        if (millis() - inactivityTime > 300000)
+        if ((millis() - inactivityTime) > 300000)
         {
             if (amoled.getBrightness() > 0) {
                 amoled.setBrightness(0);
@@ -390,7 +409,7 @@ void checkFailures()
         while (wait)
         {
 
-            if (millis() - elapsedTime > 300000)
+            if ((millis() - elapsedTime) > 300000)
             {
                 ledcWrite(0, 153);  // Inicializa o buzzer com 50% de duty cycle
                 delay(300);

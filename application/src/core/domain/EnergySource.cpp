@@ -100,7 +100,29 @@ WaveDirection EnergySource::GetWaveDirection()
 void EnergySource::AddBufferValue(uint16_t value)
 {
     buffer.AddReadingAc(value);
-    tension = (tension < 10) ? (buffer.GetRms() * voltageCalibration) : 0.02 * (buffer.GetRms() * voltageCalibration) + 0.98 * tension;
+    
+    // Improved filtering algorithm for more stable AC tension
+    float newTension = buffer.GetRms() * voltageCalibration;
+    
+    // Use exponential moving average with adaptive alpha
+    float alpha = 0.15f; // Increased from 0.02 for faster response
+    
+    // Apply adaptive filtering based on voltage stability
+    if (tension > 0) {
+        float voltageChange = abs(newTension - tension) / tension;
+        
+        // If voltage change is small, use more aggressive filtering
+        if (voltageChange < 0.05f) { // Less than 5% change
+            alpha = 0.05f; // Very stable - use more filtering
+        } else if (voltageChange < 0.15f) { // Less than 15% change
+            alpha = 0.15f; // Moderate change - balanced filtering
+        } else {
+            alpha = 0.30f; // Large change - faster response
+        }
+    }
+    
+    // Apply the filter
+    tension = (tension == 0) ? newTension : (alpha * newTension + (1.0f - alpha) * tension);
 
     if ((tension < 90.0 || tension > 150) && status == EnergyStatus::ACTIVE) {
         SetStatus(EnergyStatus::INACTIVE);
@@ -182,4 +204,54 @@ unsigned int EnergySource::GetTopAdcValue()
 unsigned int EnergySource::GetBottomAdcValue()
 {
     return bottomAdcValue;
+}
+
+void EnergySource::AutoCalibrateDcOffset()
+{
+    if (!isCalibrated) {
+        if (calibrationStartTime == 0) {
+            calibrationStartTime = millis();
+            // Reset min/max values for calibration
+            topAdcValue = 0;
+            bottomAdcValue = 4096;
+        }
+        
+        // Collect samples for 5 seconds
+        if ((millis() - calibrationStartTime) < CALIBRATION_DURATION) {
+            // Update min/max during calibration
+            if (sensorValue > topAdcValue) {
+                topAdcValue = sensorValue;
+            }
+            if (sensorValue < bottomAdcValue) {
+                bottomAdcValue = sensorValue;
+            }
+        } else {
+            // Calibration complete - calculate optimal DC offset
+            uint32_t calculatedOffset = (topAdcValue + bottomAdcValue) / 2;
+            
+            // Update the DC offset in the buffer
+            buffer.SetDcOffset(calculatedOffset);
+            
+            // Reset calibration state
+            isCalibrated = true;
+            calibrationStartTime = 0;
+            
+            Serial.printf("Auto-calibration complete. DC Offset: %d (Min: %d, Max: %d)\n", 
+                         calculatedOffset, bottomAdcValue, topAdcValue);
+        }
+    }
+}
+
+bool EnergySource::IsCalibrated() const
+{
+    return isCalibrated;
+}
+
+void EnergySource::TriggerRecalibration()
+{
+    isCalibrated = false;
+    calibrationStartTime = 0;
+    topAdcValue = 0;
+    bottomAdcValue = 4096;
+    Serial.println("Recalibration triggered for " + GetTypePrintable() + " source");
 }

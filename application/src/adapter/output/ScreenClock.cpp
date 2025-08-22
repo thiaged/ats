@@ -29,7 +29,7 @@ ScreenClock::ScreenClock(
 void ScreenClock::Render()
 {
     Screen::Render();
-    if (millis() - slowScreenAnimClock > 500)
+    if ((millis() - slowScreenAnimClock) > 500)
     {
         slowScreenAnimClock = millis();
         drawClock();

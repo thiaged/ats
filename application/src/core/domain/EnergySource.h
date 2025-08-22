@@ -75,4 +75,14 @@ public:
     virtual void SetVoltageOffset(uint32_t value) = 0;
     unsigned int GetTopAdcValue();
     unsigned int GetBottomAdcValue();
+    
+    // Auto-calibration methods for better stability
+    void AutoCalibrateDcOffset();
+    bool IsCalibrated() const;
+    void TriggerRecalibration();
+    
+private:
+    bool isCalibrated = false;
+    unsigned long calibrationStartTime = 0;
+    static const unsigned long CALIBRATION_DURATION = 5000; // 5 seconds for calibration
 };

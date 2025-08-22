@@ -156,7 +156,7 @@ void ScreenHome::drawScreenHome()
 void ScreenHome::Render()
 {
     Screen::Render();
-    if (millis() - slowScreenAnimHome > 200)
+    if ((millis() - slowScreenAnimHome) > 200)
     {
         slowScreenAnimHome = millis();
         drawBattery();

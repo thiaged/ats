@@ -225,7 +225,7 @@ void BatterySource::readBatteryResistorDivisor()
 
 void BatterySource::readBatteryBMS()
 {
-    if (millis() - lastBmsRequestTime > 2000)
+    if ((millis() - lastBmsRequestTime) > 2000)
     {
         sendCommand(REQUEST_BASIC_INFO, REQUEST_BASIC_INFO_SIZE);
         lastBmsRequestTime = millis();

@@ -30,7 +30,7 @@ protected:
     uint64_t delayRecovery = 10000000; //atrasar recuperacao da rede, valor em microsegundos. 1.000.000 = 1s
     unsigned int sensorValue = 0;
     unsigned int lastSensorValue = 0;
-    float voltageCalibration = 0.202;
+    float voltageCalibration = 0.142;
     float alphaFilter = 0.1;
     unsigned int unstableSamples = 10;
     int countRisingSignal = 0;
@@ -75,4 +75,14 @@ public:
     virtual void SetVoltageOffset(uint32_t value) = 0;
     unsigned int GetTopAdcValue();
     unsigned int GetBottomAdcValue();
+    
+    // Auto-calibration methods for better stability
+    void AutoCalibrateDcOffset();
+    bool IsCalibrated() const;
+    void TriggerRecalibration();
+    
+private:
+    bool isCalibrated = false;
+    unsigned long calibrationStartTime = 0;
+    static const unsigned long CALIBRATION_DURATION = 5000; // 5 seconds for calibration
 };

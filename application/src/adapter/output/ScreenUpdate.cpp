@@ -25,13 +25,13 @@ ScreenUpdate::ScreenUpdate(
 void ScreenUpdate::Render()
 {
     Screen::Render();
-    if (millis() - slowScreenAnimUpdate > 500)
+    if ((millis() - slowScreenAnimUpdate) > 500)
     {
         slowScreenAnimUpdate = millis();
         drawUpdate();
 
         if (restartSystem) {
-            if (millis() - restartIniMillis > restartDelayMiliseconds) {
+            if ((millis() - restartIniMillis) > restartDelayMiliseconds) {
                 ESP.restart(); // Reinicia o ESP32
             }
         }

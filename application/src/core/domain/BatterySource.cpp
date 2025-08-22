@@ -2,7 +2,8 @@
 
 bool BatterySource::IsLowBattery()
 {
-    if (bmsComunicationOn) {
+    if (BMS.isConnected)
+    {
         return batteryPercentage < batteryConfigMinPercentage;
     }
 
@@ -11,6 +12,10 @@ bool BatterySource::IsLowBattery()
 
 bool BatterySource::IsEmpty()
 {
+    if (BMS.isConnected)
+    {
+        return batteryPercentage < 5; // Considered empty when below 5%
+    }
     return batteryVoltage < batteryVoltageMin;
 }
 
@@ -31,10 +36,9 @@ void BatterySource::SetBmsComunicationOn(bool value)
     if (changed)
     {
         configPreferences.begin("config", false);
-        configPreferences.putBool("bms-on", value); //maximo 15 char on name
+        configPreferences.putBool("bms-on", value); // maximo 15 char on name
         configPreferences.end();
     }
-
 }
 
 void BatterySource::SetBatteryConfigMin(double value)
@@ -44,7 +48,7 @@ void BatterySource::SetBatteryConfigMin(double value)
     if (changed)
     {
         configPreferences.begin("config", false);
-        configPreferences.putDouble("bMin", value); //maximo 15 char on name
+        configPreferences.putDouble("bMin", value); // maximo 15 char on name
         configPreferences.end();
     }
 }
@@ -56,7 +60,7 @@ void BatterySource::SetBatteryConfigMax(double value)
     if (changed)
     {
         configPreferences.begin("config", false);
-        configPreferences.putDouble("bMax", value); //maximo 15 char on name
+        configPreferences.putDouble("bMax", value); // maximo 15 char on name
         configPreferences.end();
     }
 }
@@ -68,7 +72,7 @@ void BatterySource::SetBatteryConfigMinPercentage(int value)
     if (changed)
     {
         configPreferences.begin("config", false);
-        configPreferences.putInt("bMinPercent", value); //maximo 15 char on name
+        configPreferences.putInt("bMinPercent", value); // maximo 15 char on name
         configPreferences.end();
     }
 }
@@ -80,7 +84,7 @@ void BatterySource::SetBatteryConfigMaxPercentage(int value)
     if (changed)
     {
         configPreferences.begin("config", false);
-        configPreferences.putInt("bMaxPercent", value); //maximo 15 char on name
+        configPreferences.putInt("bMaxPercent", value); // maximo 15 char on name
         configPreferences.end();
     }
 }
@@ -115,6 +119,11 @@ bool BatterySource::GetBmsComunicationOn()
     return bmsComunicationOn;
 }
 
+BMSData BatterySource::GetBms()
+{
+    return BMS;
+}
+
 bool BatterySource::LowBatteryDelayEnded()
 {
     return esp_timer_get_time() - lowBatteryStarted > peakSurgeDelay;
@@ -132,10 +141,8 @@ void BatterySource::funcSensorReadTask()
     {
         readBatteryBMS();
     }
-    else
-    {
-        readBatteryResistorDivisor();
-    }
+
+    readBatteryResistorDivisor();
 
     portYIELD_FROM_ISR(pdFALSE); // Garante que a task vai ser executada imediatamente
     // vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -143,7 +150,7 @@ void BatterySource::funcSensorReadTask()
 
 void BatterySource::sensorReadTask(void *pvParameters)
 {
-    BatterySource* instance = static_cast<BatterySource*>(pvParameters);
+    BatterySource *instance = static_cast<BatterySource *>(pvParameters);
 
     if (instance == nullptr)
     {
@@ -161,67 +168,12 @@ void BatterySource::sensorReadTask(void *pvParameters)
     }
 }
 
-void BatterySource::readBatteryBMS()
-{
-    // Envia o comando para ler tensão e porcentagem da BMS
-    enviarComandoLeitura();
-    delay(150);
-
-    if (bmsComunicationFailures > 5) {
-        SetBmsComunicationOn(false);
-    }
-
-    // Lê e interpreta a resposta
-    if (rs485.available())
-    {
-        uint8_t resposta[30];
-        int bytesRecebidos = rs485.readBytes(resposta, 30);
-
-        if (bytesRecebidos > 0 && validarChecksum(resposta, bytesRecebidos))
-        {
-            interpretarResposta(resposta);
-        }
-        else
-        {
-            bmsComunicationFailures++;
-            Serial.println("Erro na leitura ou checksum inválido");
-        }
-    } else {
-        bmsComunicationFailures++;
-        Serial.println("Sem resposta da BMS");
-    }
-}
-
-void BatterySource::enviarComandoLeitura()
-{
-    uint8_t comando[] = {0xDD, 0xA5, 0x03, 0x00, 0xFF, 0xFD, 0x77};
-    rs485.write(comando, sizeof(comando));
-    Serial.println("Comando de leitura enviado");
-}
-
-bool BatterySource::validarChecksum(uint8_t *data, int len)
-{
-    // Implemente a lógica de validação de checksum de acordo com a documentação
-    // (soma dos bytes, complemento +1)
-    return true; // Retorne verdadeiro se o checksum for válido
-}
-
-void BatterySource::interpretarResposta(uint8_t *data)
-{
-    uint16_t tensaoRaw = (data[0] << 8) | data[1]; // Converte os dois primeiros bytes para uint16_t
-    uint8_t porcentagemRaw = data[10];             // Lê o 11º byte como porcentagem
-
-    // Converte valores brutos para valores reais de tensão e porcentagem
-    batteryVoltage = tensaoRaw / 100.0; // Dividir por 100 para converter de 10mV para V
-    batteryPercentage = porcentagemRaw; // Porcentagem direto de 0 a 100
-}
-
 BatterySource::BatterySource(
     DynamicAnalogBuffer &pBatteryReadBuffer,
     Preferences &pConfigPreferences,
-    bool *pUpdatingFirmware
-)
-    : batteryReadBuffer(pBatteryReadBuffer), configPreferences(pConfigPreferences)
+    HardwareSerial &pSerial,
+    bool *pUpdatingFirmware)
+    : batteryReadBuffer(pBatteryReadBuffer), configPreferences(pConfigPreferences), RS485Serial(pSerial)
 {
     updatingFirmware = pUpdatingFirmware;
 }
@@ -229,7 +181,7 @@ BatterySource::BatterySource(
 void BatterySource::Init()
 {
     pinMode(BATTERY_SENSOR_PIN, INPUT);
-    rs485.begin(9600, SERIAL_8N1, 44, 43); // RX, TX
+    RS485Serial.begin(RS485_BAUD, SERIAL_8N1, RS485_RX, RS485_TX);
     // rs485->begin(9600);
     // rs485->listen();  GPIO44 - UORXD and GPIO43 - UOTXD
     Serial.println("BMS Comunication started");
@@ -250,13 +202,13 @@ void BatterySource::Init()
 void BatterySource::startSensorReadTask()
 {
     xTaskCreatePinnedToCore(
-        sensorReadTask,        // Função da task
+        sensorReadTask,           // Função da task
         "ReadBatterySensorTask",  // Nome da task
-        4096,                  // Tamanho da stack (bytes)
-        this,                  // Passa a instância como parâmetro
-        2,                     // Prioridade da task
+        4096,                     // Tamanho da stack (bytes)
+        this,                     // Passa a instância como parâmetro
+        2,                        // Prioridade da task
         &batterySensorTaskHandle, // Handle da task (opcional)
-        1                      // Núcleo onde a task será fixada (0 ou 1)
+        1                         // Núcleo onde a task será fixada (0 ou 1)
     );
 }
 
@@ -264,11 +216,116 @@ void BatterySource::readBatteryResistorDivisor()
 {
     // Leitura do valor analógico (entre 0 e 4095)
     int adcValue = analogReadMilliVolts(BATTERY_SENSOR_PIN);
-    if (adcValue < 700) adcValue = 0;
+    if (adcValue < 700)
+        adcValue = 0;
 
     batteryReadBuffer.AddReading(adcValue);
     batteryVoltage = (batteryReadBuffer.GetMean() / 4096.0 * 3.33) * ((BATTERY_SENSOR_R1 + BATTERY_SENSOR_R2) / BATTERY_SENSOR_R2) * batteryConfig.batteryCalibrationValue;
+}
 
+void BatterySource::readBatteryBMS()
+{
+    if ((millis() - lastBmsRequestTime) > 2000)
+    {
+        sendCommand(REQUEST_BASIC_INFO, REQUEST_BASIC_INFO_SIZE);
+        lastBmsRequestTime = millis();
+    }
+
+    // Lê dados disponíveis na porta serial
+    while (RS485Serial.available() && bufferIndex < MAX_BUFFER_SIZE)
+    {
+        receiveBuffer[bufferIndex++] = RS485Serial.read();
+    }
+
+    // Se recebeu dados, processa-os
+    if (bufferIndex > 0)
+    {
+        // Procura pelo início do pacote (0xDD, 0xA5)
+        for (int i = 0; i < bufferIndex - 1; i++)
+        {
+            if (receiveBuffer[i] == 0xDD && receiveBuffer[i + 1] == 0xA5)
+            {
+                // Encontrou o início do pacote, processa os dados
+                processReceivedData();
+
+                // Limpa o buffer após processamento
+                bufferIndex = 0;
+                break;
+            }
+        }
+
+        // Se o buffer está cheio mas não encontrou um pacote válido, limpa-o
+        if (bufferIndex >= MAX_BUFFER_SIZE)
+        {
+            bufferIndex = 0;
+            Serial.println("Buffer cheio, limpando");
+        }
+    }
+
+    // Verifica timeout de conexão
+    checkConnectionTimeout();
+}
+
+void BatterySource::processReceivedData()
+{
+    // Verifica se os dados recebidos têm o formato correto
+    // Este é um exemplo simplificado e deve ser adaptado conforme o protocolo real da JK BMS
+
+    // Verifica o cabeçalho e o tamanho mínimo
+    if (bufferIndex < 10 || receiveBuffer[0] != 0xDD || receiveBuffer[1] != 0xA5)
+    {
+        Serial.println("Dados inválidos recebidos");
+        return;
+    }
+
+    // Extrai o comprimento dos dados
+    int dataLength = receiveBuffer[2];
+
+    // Verifica se recebemos dados suficientes
+    if (bufferIndex < dataLength + 7)
+    {
+        Serial.println("Pacote incompleto");
+        return;
+    }
+
+    // Verifica o checksum (implementação simplificada)
+    // Na implementação real, você deve calcular e verificar o checksum conforme o protocolo da JK BMS
+
+    // Exemplo de parsing (os offsets e multiplicadores devem ser ajustados conforme protocolo real)
+    // Nota: Este é um exemplo genérico e deve ser adaptado para o protocolo específico da JK BMS
+    BMS.totalVoltage = (receiveBuffer[4] * 256 + receiveBuffer[5]) / 100.0;
+    BMS.current = ((int16_t)(receiveBuffer[6] * 256 + receiveBuffer[7])) / 100.0;
+    BMS.power = BMS.totalVoltage * BMS.current;
+    BMS.temperature = (receiveBuffer[8] - 40); // Exemplo de conversão de temperatura
+    BMS.soc = receiveBuffer[10];
+
+    // Atualiza o timestamp da última resposta válida
+    BMS.lastResponseTime = millis();
+    BMS.isConnected = true;
+
+    Serial.println("Dados processados com sucesso");
+}
+
+void BatterySource::sendCommand(const byte *command, int length)
+{
+    // Limpa o buffer de recepção antes de enviar um novo comando
+    while (RS485Serial.available())
+    {
+        RS485Serial.read();
+    }
+
+    // Envia o comando
+    RS485Serial.write(command, length);
+}
+
+void BatterySource::checkConnectionTimeout()
+{
+    // Se não receber resposta por mais de 5 segundos, considera desconectado
+    if (BMS.isConnected && (millis() - BMS.lastResponseTime > 1000))
+    {
+        BMS.isConnected = false;
+        Serial.println("Timeout de conexão com a BMS");
+    }
 }
 
 double BatterySource::GetBatteryConfigMin()
@@ -313,7 +370,8 @@ double BatterySource::GetBatteryVoltageMax()
 
 bool BatterySource::IsHighBattery()
 {
-    if (bmsComunicationOn) {
+    if (BMS.isConnected)
+    {
         return batteryPercentage > batteryConfigMaxPercentage;
     }
 

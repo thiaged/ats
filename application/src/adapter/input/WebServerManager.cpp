@@ -167,6 +167,23 @@ void WebserverManager::onMqttMessage(char *topic, byte *payload, unsigned int le
 
 }
 
+void WebserverManager::subscribeAllMqttTopics()
+{
+    mqttClient.subscribe("casa/bms/set");
+    mqttClient.subscribe("casa/power_source/set");
+    mqttClient.subscribe("casa/locked_to_source/set");
+    mqttClient.subscribe("casa/wait_for_sync/set");
+    mqttClient.subscribe("casa/voltage_calibration_sol/set");
+    mqttClient.subscribe("casa/voltage_calibration_uti/set");
+    mqttClient.subscribe("casa/voltage_offset_utility/set");
+    mqttClient.subscribe("casa/voltage_offset_solar/set");
+    mqttClient.subscribe("casa/firmware_utility_check/set");
+    mqttClient.subscribe("casa/battery_voltage_solar/set");
+    mqttClient.subscribe("casa/battery_voltage_utility/set");
+    mqttClient.subscribe("casa/battery_percentage_solar/set");
+    mqttClient.subscribe("casa/battery_percentage_utility/set");
+}
+
 void WebserverManager::NotifyClients(const String &message)
 {
     websocket.textAll(message);
@@ -187,6 +204,12 @@ void WebserverManager::SendToMqtt(const char *topic, const char *message)
     if (!mqttClient.connected())
     {
         mqttClient.connect(MQTT_ID, MQTT_USER, MQTT_PASSWORD);
+        if (!mqttClient.connected())
+        {
+            Serial.println("Falha ao conectar ao MQTT");
+            return;
+        }
+        subscribeAllMqttTopics();
     }
     mqttClient.publish(topic, message, true);
 }
@@ -483,19 +506,7 @@ void WebserverManager::Init()
     if (mqttClient.connected())
     {
         Serial.println("Conectado ao MQTT");
-        mqttClient.subscribe("casa/bms/set");
-        mqttClient.subscribe("casa/power_source/set");
-        mqttClient.subscribe("casa/locked_to_source/set");
-        mqttClient.subscribe("casa/wait_for_sync/set");
-        mqttClient.subscribe("casa/voltage_calibration_sol/set");
-        mqttClient.subscribe("casa/voltage_calibration_uti/set");
-        mqttClient.subscribe("casa/voltage_offset_utility/set");
-        mqttClient.subscribe("casa/voltage_offset_solar/set");
-        mqttClient.subscribe("casa/firmware_utility_check/set");
-        mqttClient.subscribe("casa/battery_voltage_solar/set");
-        mqttClient.subscribe("casa/battery_voltage_utility/set");
-        mqttClient.subscribe("casa/battery_percentage_solar/set");
-        mqttClient.subscribe("casa/battery_percentage_utility/set");
+        subscribeAllMqttTopics();
     }
     else
     {

@@ -39,17 +39,39 @@ void ScreenHome::drawBattery()
     batterySprite->drawRect(1, 4, 28, 90, COLOR_BATTERY_SYMBOL_BORDER);
 
     // bat energy
-    int level = map(battery.GetBatteryVoltage() * 100, battery.GetBatteryVoltageMin() * 100, battery.GetBatteryVoltageMax() * 100, 0, 88);
-    int linePosMax = 88 - map(battery.GetBatteryConfigMax() * 100, battery.GetBatteryVoltageMin() * 100, battery.GetBatteryVoltageMax() * 100, 0, 88);
-    int linePosMin = 88 - map(battery.GetBatteryConfigMin() * 100, battery.GetBatteryVoltageMin() * 100, battery.GetBatteryVoltageMax() * 100, 0, 88);
+    int level = (battery.GetBms().isConnected == true) ?
+        map(battery.GetBms().soc, 0, 100, 0, 88) :
+        map(battery.GetBatteryVoltage() * 100, battery.GetBatteryVoltageMin() * 100, battery.GetBatteryVoltageMax() * 100, 0, 88);
+
+    int linePosMax = (battery.GetBms().isConnected == true) ?
+        88 - map(battery.GetBatteryConfigMaxPercentage(), 0, 100, 0, 88) :
+        88 - map(battery.GetBatteryConfigMax() * 100, battery.GetBatteryVoltageMin() * 100, battery.GetBatteryVoltageMax() * 100, 0, 88);
+
+    int linePosMin = (battery.GetBms().isConnected == true) ?
+        88 - map(battery.GetBatteryConfigMinPercentage(), 0, 100, 0, 88) :
+        88 - map(battery.GetBatteryConfigMin() * 100, battery.GetBatteryVoltageMin() * 100, battery.GetBatteryVoltageMax() * 100, 0, 88);
     batterySprite->fillRect(2, (5 + 88 - level), 26, level, colorEnergy);
 
     // configs min and max
     batterySprite->drawLine(12, 5 + linePosMax, 40, 5 + linePosMax, TFT_WHITE);
-    batterySprite->drawString(String(battery.GetBatteryConfigMax()), 40, linePosMax, 2);
+    if (battery.GetBms().isConnected == true)
+    {
+        batterySprite->drawString(String(battery.GetBatteryConfigMaxPercentage()) + "%", 40, linePosMax, 2);
+    }
+    else
+    {
+        batterySprite->drawString(String(battery.GetBatteryConfigMax()) + "V", 40, linePosMax, 2);
+    }
 
     batterySprite->drawLine(12, 5 + linePosMin, 40, 5 + linePosMin, TFT_WHITE);
-    batterySprite->drawString(String(battery.GetBatteryConfigMin()), 40, linePosMin, 2);
+    if (battery.GetBms().isConnected == true)
+    {
+        batterySprite->drawString(String(battery.GetBatteryConfigMinPercentage()) + "%", 40, linePosMin, 2);
+    }
+    else
+    {
+        batterySprite->drawString(String(battery.GetBatteryConfigMin()) + "V", 40, linePosMin, 2);
+    }
 
     drawManager.RequestDraw(440, 74, 84, 95, batterySprite, nullptr, nullptr);
 }
@@ -134,7 +156,7 @@ void ScreenHome::drawScreenHome()
 void ScreenHome::Render()
 {
     Screen::Render();
-    if (millis() - slowScreenAnimHome > 200)
+    if ((millis() - slowScreenAnimHome) > 200)
     {
         slowScreenAnimHome = millis();
         drawBattery();

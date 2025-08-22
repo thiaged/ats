@@ -651,6 +651,8 @@ private:
 
     void onMqttMessage(char *topic, byte *payload, unsigned int length);
 
+    void subscribeAllMqttTopics();
+
 public:
     WebserverManager(
         EnergySource &pUtilitySource,

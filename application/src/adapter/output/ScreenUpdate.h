@@ -38,4 +38,8 @@ public:
     void IncreaseProcessedSize(unsigned long value);
     void PrintProgress();
     void SetRestart(bool value);
+
+    // Getters for progress tracking
+    unsigned long GetFirmwareSize() const { return firmwareSize; }
+    unsigned long GetProcessedSize() const { return firmwareSizeProcessed; }
 };

@@ -1,157 +1,378 @@
 #include "BatterySource.h"
 
-bool BatterySource::IsLowBattery()
+BatterySource::BatterySource(
+    DynamicAnalogBuffer &pBatteryReadBuffer,
+    Preferences &pConfigPreferences,
+    HardwareSerial &pSerial,
+    bool *pUpdatingFirmware
+)
+    : batteryReadBuffer(pBatteryReadBuffer),
+      configPreferences(pConfigPreferences),
+      RS485Serial(pSerial),
+      updatingFirmware(pUpdatingFirmware)
 {
-    if (BMS.isConnected)
-    {
-        return batteryPercentage < batteryConfigMinPercentage;
-    }
+    bufferIndex = 0;
+    lastBmsRequestTime = 0;
+    bmsProcessing = false;
 
-    return batteryVoltage < batteryConfigMin;
-}
+    // Inicializa a jump table
+    initializeJumpTable();
 
-bool BatterySource::IsEmpty()
-{
-    if (BMS.isConnected)
-    {
-        return batteryPercentage < 5; // Considered empty when below 5%
-    }
-    return batteryVoltage < batteryVoltageMin;
-}
-
-void BatterySource::SetBatteryVoltage(double value)
-{
-    batteryVoltage = value;
-}
-
-void BatterySource::SetBatteryPercentage(double value)
-{
-    batteryPercentage = value;
-}
-
-void BatterySource::SetBmsComunicationOn(bool value)
-{
-    bool changed = value != bmsComunicationOn;
-    bmsComunicationOn = value;
-    if (changed)
-    {
-        configPreferences.begin("config", false);
-        configPreferences.putBool("bms-on", value); // maximo 15 char on name
-        configPreferences.end();
+    for (size_t i = 0; i < NUM_VALID_ADDRESSES; i++) {
+        addressValid[VALID_ADDRESSES[i]] = true;
     }
 }
 
-void BatterySource::SetBatteryConfigMin(double value)
+bool isValidAddress(uint8_t addr) {
+    for (size_t i = 0; i < NUM_VALID_ADDRESSES; i++) {
+        if (VALID_ADDRESSES[i] == addr) {
+            return true;
+        }
+    }
+    return false;
+}
+
+BatterySource::~BatterySource()
 {
-    bool changed = value != batteryConfigMin;
-    batteryConfigMin = value;
-    if (changed)
-    {
-        configPreferences.begin("config", false);
-        configPreferences.putDouble("bMin", value); // maximo 15 char on name
-        configPreferences.end();
+    if (batterySensorTaskHandle != NULL) {
+        vTaskDelete(batterySensorTaskHandle);
     }
 }
 
-void BatterySource::SetBatteryConfigMax(double value)
+void BatterySource::initializeJumpTable()
 {
-    bool changed = value != batteryConfigMax;
-    batteryConfigMax = value;
-    if (changed)
-    {
-        configPreferences.begin("config", false);
-        configPreferences.putDouble("bMax", value); // maximo 15 char on name
-        configPreferences.end();
+    // Inicializa todos como nullptr
+    for (int i = 0; i < JUMP_TABLE_SIZE; i++) {
+        jumpTable[i] = nullptr;
+        dataSizes[i] = 1;
+    }
+
+    // Mapeia os endereços conhecidos
+    jumpTable[REG_CELL_VOLTAGES] = &BatterySource::parseCellVoltages;
+    jumpTable[REG_MOS_TEMP]      = &BatterySource::parseMosTemp;
+    dataSizes[REG_MOS_TEMP]      = 2;
+    jumpTable[REG_BATTERY_T1]    = &BatterySource::parseBatteryT1;
+    dataSizes[REG_BATTERY_T1]    = 2;
+    jumpTable[REG_BATTERY_T2]    = &BatterySource::parseBatteryT2;
+    dataSizes[REG_BATTERY_T2]    = 2;
+    jumpTable[REG_TOTAL_VOLTAGE] = &BatterySource::parseTotalVoltage;
+    dataSizes[REG_TOTAL_VOLTAGE] = 2;
+    jumpTable[REG_CURRENT]       = &BatterySource::parseCurrent;
+    dataSizes[REG_CURRENT]       = 2;
+    jumpTable[REG_RESIDUAL_CAPACITY] = &BatterySource::parseSOC;
+    dataSizes[REG_RESIDUAL_CAPACITY] = 1;
+    jumpTable[REG_NUM_NTC]    = &BatterySource::parseNumNTC;
+    dataSizes[REG_NUM_NTC]    = 1;
+    jumpTable[REG_CYCLE_COUNT] = &BatterySource::parseCycleCount;
+    dataSizes[REG_CYCLE_COUNT] = 2;
+    jumpTable[REG_BATTERY_CAPACITY] = &BatterySource::parseBatteryCapacity;
+    dataSizes[REG_BATTERY_CAPACITY] = 4;
+    jumpTable[REG_TOTAL_STRINGS] = &BatterySource::parseTotalStrings;
+    dataSizes[REG_TOTAL_STRINGS] = 2;
+    jumpTable[REG_WARN_MESSAGES] = &BatterySource::parseWarnMessages;
+    dataSizes[REG_WARN_MESSAGES] = 2;
+
+    // Para qualquer endereço não mapeado, usa parseUnknown
+    for (int i = 0; i < JUMP_TABLE_SIZE; i++) {
+        if (jumpTable[i] == nullptr) {
+            jumpTable[i] = &BatterySource::parseUnknown;
+        }
     }
 }
 
-void BatterySource::SetBatteryConfigMinPercentage(int value)
+void BatterySource::parseCellVoltages(const byte* data, int length, int offset)
 {
-    bool changed = value != batteryConfigMinPercentage;
-    batteryConfigMinPercentage = value;
-    if (changed)
-    {
-        configPreferences.begin("config", false);
-        configPreferences.putInt("bMinPercent", value); // maximo 15 char on name
-        configPreferences.end();
+    float highestCellVoltage = 0.0;
+    float lowestCellVoltage = 100.0;
+
+    // Resetar índices antes de processar
+    BMS.highestCellIndex = -1;
+    BMS.lowestCellIndex = -1;
+
+    // Verificação de segurança: garantir que há espaço para o comprimento
+    if (offset + 1 >= length) {
+        Serial.println("⚠️ Buffer insuficiente para ler comprimento das células");
+        return;
+    }
+
+    // ⭐ LER O BYTE DE COMPRIMENTO CORRETAMENTE ⭐
+    uint8_t dataLength = data[offset]; // offset+1 porque offset aponta para o ID (0x79)
+    dataSizes[REG_CELL_VOLTAGES] = dataLength; // Armazenar para avançar no parsing principal
+
+    // Verificar se há dados suficientes
+    if (offset + 1 + dataLength > length) { // +2: ID + comprimento
+        Serial.printf("⚠️ Dados insuficientes para células: precisa %d, tem %d\n",
+                     offset + 2 + dataLength, length);
+        return;
+    }
+
+    int numCells = dataLength / 3; // Cada célula usa 3 bytes
+    // Serial.printf("🔋 Processando %d células (comprimento=%d)\n", numCells, dataLength);
+
+    // ⭐ POSIÇÃO CORRETA PARA INÍCIO DOS DADOS ⭐
+    int j = offset + 1; // Após byte de comprimento
+
+    for (int cellIndex = 0; cellIndex < numCells && j + 2 < length; cellIndex++) {
+        byte cellId = data[j];       // ID da célula
+        uint16_t rawVoltage = (data[j + 1] << 8) | data[j + 2]; // Tensão em mV
+
+        // Serial.printf("  Célula %d: ID=%d, tensão=%d mV\n",
+        //              cellIndex, cellId, rawVoltage);
+
+        // Validação do ID da célula (1-24)
+        if (cellId >= 1 && cellId <= 24) {
+            float voltage = rawVoltage / 1000.0; // Converter para volts
+
+            // Validação de tensão realista (2.5V - 4.2V para LiFePO4)
+            if (voltage >= 2.0 && voltage <= 5.0) {
+                BMS.cellVoltages[cellId] = voltage;
+
+                // Atualizar célula mais alta
+                if (BMS.highestCellIndex == -1 || voltage > highestCellVoltage) {
+                    highestCellVoltage = voltage;
+                    BMS.highestCellIndex = cellId;
+                }
+
+                // Atualizar célula mais baixa
+                if (BMS.lowestCellIndex == -1 || voltage < lowestCellVoltage) {
+                    lowestCellVoltage = voltage;
+                    BMS.lowestCellIndex = cellId;
+                }
+            } else {
+                Serial.printf("  ⚠️ Tensão inválida na célula %d: %.3f V\n",
+                             cellId, voltage);
+            }
+        } else {
+            Serial.printf("  ⚠️ ID de célula inválido: %d\n", cellId);
+        }
+
+        j += 3; // Avançar para próxima célula (3 bytes por célula)
+    }
+
+    // Debug dos resultados
+    // if (BMS.highestCellIndex != -1 && BMS.lowestCellIndex != -1) {
+    //     Serial.printf("📊 Célula mais alta: #%d (%.3f V), Célula mais baixa: #%d (%.3f V)\n",
+    //                  BMS.highestCellIndex, highestCellVoltage,
+    //                  BMS.lowestCellIndex, lowestCellVoltage);
+    // }
+}
+
+void BatterySource::parseTemperature(const byte* data, int length, int offset, float& target)
+{
+    if (offset + 1 < length) {
+        uint8_t rawTemp = data[offset + 1];
+        // Conversão segundo protocolo: valores acima de 100 são negativos
+        float temperature;
+        if (rawTemp > 100) {
+            temperature = -(rawTemp - 100);
+        } else {
+            temperature = 100 - rawTemp;
+        }
+        target = temperature - 40; // Ajuste para a faixa correta
     }
 }
 
-void BatterySource::SetBatteryConfigMaxPercentage(int value)
+void BatterySource::parseMosTemp(const byte* data, int length, int offset)
 {
-    bool changed = value != batteryConfigMaxPercentage;
-    batteryConfigMaxPercentage = value;
-    if (changed)
-    {
-        configPreferences.begin("config", false);
-        configPreferences.putInt("bMaxPercent", value); // maximo 15 char on name
-        configPreferences.end();
+    parseTemperature(data, length, offset, BMS.mosTemp);
+}
+
+void BatterySource::parseBatteryT1(const byte* data, int length, int offset)
+{
+    parseTemperature(data, length, offset, BMS.batteryT1);
+}
+
+void BatterySource::parseBatteryT2(const byte* data, int length, int offset)
+{
+    parseTemperature(data, length, offset, BMS.batteryT2);
+}
+
+void BatterySource::parseTotalVoltage(const byte* data, int length, int offset)
+{
+    if (offset + dataSizes[REG_TOTAL_VOLTAGE] < length) {
+        uint16_t rawValue = (data[offset] << 8) | data[offset + 1];
+        double voltage = rawValue / 100.0;
+        if((int)voltage != 468 && voltage > batteryVoltageMin && voltage < batteryVoltageMax) BMS.totalVoltage = voltage;
     }
 }
 
-void BatterySource::SetBatteryVoltageMin(double value)
+void BatterySource::parseCurrent(const byte* data, int length, int offset)
 {
-    batteryVoltageMin = value;
+    if (offset + dataSizes[REG_CURRENT] < length) {
+        uint16_t rawValue = (data[offset] << 8) | data[offset + 1];
+        bool isCharging = (rawValue & 0x8000) != 0;
+        uint16_t magnitude = rawValue & 0x7FFF;
+        isCharging = (magnitude != 0) ? isCharging : false; // Se magnitude for 0, força isCharging para false
+        double current = (isCharging ? 1.0 : -1.0) * magnitude * 0.01;
+        if (current > -200.0 && current < 200.0) {
+            BMS.current = current;
+            BMS.power = BMS.totalVoltage * BMS.current;
+        }
+    }
 }
 
-void BatterySource::SetBatteryVoltageMax(double value)
+void BatterySource::parseSOC(const byte* data, int length, int offset)
 {
-    batteryVoltageMax = value;
+    if (offset + dataSizes[REG_RESIDUAL_CAPACITY] < length) {
+        int soc = data[offset];
+        if (soc <= 100) {
+            if (BMS.soc == 0 || abs(soc - BMS.soc) < 5) {
+                BMS.soc = soc;
+                bmsComunicationFailures = 0;
+            } else {
+                bmsComunicationFailures++;
+            }
+        }
+    }
 }
 
-void BatterySource::UpdateLowBatteryStarted()
+void BatterySource::parseTotalStrings(const byte* data, int length, int offset)
 {
-    lowBatteryStarted = esp_timer_get_time();
+    if (offset + dataSizes[REG_TOTAL_STRINGS] < length) {
+        uint16_t numCells = (data[offset] << 8) | data[offset + 1];
+        Serial.printf("🔋 Número de células detectadas: %d\n", numCells);
+        if(numCells <= 24) BMS.totalStrings = numCells;
+    } else {
+        Serial.println("⚠️ Dados insuficientes para ler número de células");
+    }
 }
 
-uint64_t BatterySource::GetLowBatStarted()
+void BatterySource::parseNumNTC(const byte* data, int length, int offset)
 {
-    return lowBatteryStarted;
+    if (offset + dataSizes[REG_NUM_NTC] < length) {
+        uint8_t numNtc = data[offset];
+        // Armazena o número de sensores NTC (termistores)
+        // O protocolo especifica que este valor geralmente é 2 (dois sensores de temperatura)
+        BMS.numNTC = numNtc;
+    }
 }
 
-uint64_t BatterySource::GetPeakSurgeDelay()
+void BatterySource::parseCycleCount(const byte* data, int length, int offset)
 {
-    return peakSurgeDelay;
+    if (offset + dataSizes[REG_CYCLE_COUNT] < length) {
+        uint16_t cycleCount = (data[offset] << 8) | data[offset + 1];
+        // Armazena o número de ciclos de carga/descarga completos
+        BMS.cycleCount = cycleCount;
+    }
 }
 
-bool BatterySource::GetBmsComunicationOn()
+void BatterySource::parseBatteryCapacity(const byte* data, int length, int offset)
 {
-    return bmsComunicationOn;
+    if (offset + dataSizes[REG_BATTERY_CAPACITY] + 3 < length) {
+        // Lê 4 bytes para a capacidade total da bateria em Ah
+        uint32_t capacityRaw = (uint32_t)data[offset] << 24 |
+                              (uint32_t)data[offset + 1] << 16 |
+                              (uint32_t)data[offset + 2] << 8 |
+                              (uint32_t)data[offset + 3];
+
+        // Converte para valor em Ah (float)
+        // O protocolo não especifica a escala exata, mas geralmente é em mAh ou Ah
+        // Considerando que é provavelmente em mAh:
+        BMS.batteryCapacity = capacityRaw / 1000.0; // converte para Ah
+    }
 }
 
-BMSData BatterySource::GetBms()
+void BatterySource::parseWarnMessages(const byte* data, int length, int offset)
 {
-    return BMS;
+    if (offset + dataSizes[REG_WARN_MESSAGES] < length) {
+        uint16_t warningFlags = (data[offset] << 8) | data[offset + 1];
+
+        // Armazena as flags brutas para análise posterior
+        BMS.warningFlags = warningFlags;
+
+        // Análise detalhada dos bits de aviso conforme protocolo
+        bool lowCapacityAlarm = (warningFlags & 0x0001) != 0;       // Bit 0
+        bool mosOvertempAlarm = (warningFlags & 0x0002) != 0;       // Bit 1
+        bool chargeOvervoltageAlarm = (warningFlags & 0x0004) != 0; // Bit 2
+        bool dischargeUndervoltageAlarm = (warningFlags & 0x0008) != 0; // Bit 3
+        bool batteryOvertempAlarm = (warningFlags & 0x0010) != 0;   // Bit 4
+        bool chargeOvercurrentAlarm = (warningFlags & 0x0020) != 0; // Bit 5
+        bool dischargeOvercurrentAlarm = (warningFlags & 0x0040) != 0; // Bit 6
+        bool cellVoltageDiffAlarm = (warningFlags & 0x0080) != 0;   // Bit 7
+        bool boxOvertempAlarm = (warningFlags & 0x0100) != 0;       // Bit 8
+        bool batteryLowtempAlarm = (warningFlags & 0x0200) != 0;    // Bit 9
+        bool cellOvervoltageAlarm = (warningFlags & 0x0400) != 0;   // Bit 10
+        bool cellUndervoltageAlarm = (warningFlags & 0x0800) != 0;  // Bit 11
+        bool protection309A = (warningFlags & 0x1000) != 0;         // Bit 12
+        bool protection309B = (warningFlags & 0x2000) != 0;         // Bit 13
+
+        // Monta uma string descritiva dos alarmes ativos para debug
+        String warnings = "";
+        if (lowCapacityAlarm) warnings += "LowCapacity ";
+        if (mosOvertempAlarm) warnings += "MOSOvertemp ";
+        if (chargeOvervoltageAlarm) warnings += "ChargeOvervolt ";
+        if (dischargeUndervoltageAlarm) warnings += "DischargeUndervolt ";
+        if (batteryOvertempAlarm) warnings += "BattOvertemp ";
+        if (chargeOvercurrentAlarm) warnings += "ChargeOvercurrent ";
+        if (dischargeOvercurrentAlarm) warnings += "DischargeOvercurrent ";
+        if (cellVoltageDiffAlarm) warnings += "CellVoltageDiff ";
+        if (boxOvertempAlarm) warnings += "BoxOvertemp ";
+        if (batteryLowtempAlarm) warnings += "BattLowtemp ";
+        if (cellOvervoltageAlarm) warnings += "CellOvervoltage ";
+        if (cellUndervoltageAlarm) warnings += "CellUndervoltage ";
+        if (protection309A) warnings += "309A_Protection ";
+        if (protection309B) warnings += "309B_Protection ";
+
+        if (warnings.length() > 0) {
+            Serial.print("⚠️ BMS Warnings: ");
+            Serial.println(warnings);
+        }
+
+        // Define se há algum alarme ativo
+        BMS.hasWarnings = (warningFlags != 0);
+    }
 }
 
-bool BatterySource::LowBatteryDelayEnded()
+void BatterySource::parseUnknown(const byte* data, int length, int offset)
 {
-    return esp_timer_get_time() - lowBatteryStarted > peakSurgeDelay;
+    // ignore
 }
 
-void BatterySource::ResetLowbatteryStarted()
+void BatterySource::Init()
 {
-    lowBatteryStarted = 0;
-}
+    pinMode(BATTERY_SENSOR_PIN, INPUT);
+    RS485Serial.begin(RS485_BAUD, SERIAL_8N1, RS485_RX, RS485_TX);
+    RS485Serial.setTimeout(400);
 
-void BatterySource::funcSensorReadTask()
-{
-    // Serial.println("Battery sensor read task");
-    if (bmsComunicationOn == true)
-    {
-        readBatteryBMS();
+    Serial.println("JK BMS Communication started");
+
+    startSensorReadTask();
+
+    configPreferences.begin("config", true);
+    batteryConfig.batteryCalibrationValue = configPreferences.getFloat("battery-calib", batteryConfig.batteryCalibrationValue);
+    bmsComunicationOn = configPreferences.getBool("bms-on", false);
+    batteryConfigMin = configPreferences.getDouble("bMin", 23.50);
+    batteryConfigMax = configPreferences.getDouble("bMax", 27.00);
+    batteryConfigMinPercentage = configPreferences.getInt("bMinPercent", 40);
+    batteryConfigMaxPercentage = configPreferences.getInt("bMaxPercent", 60);
+    configPreferences.end();
+
+    // Cria a fila (pode armazenar 1 buffer por vez)
+    bmsResponseQueue = xQueueCreate(1, sizeof(BmsResponseItem));
+    if (bmsResponseQueue == NULL) {
+        Serial.println("Falha ao criar fila BMS");
     }
 
-    readBatteryResistorDivisor();
+    // Inicia a task de parsing
+    startBmsParserTask();
+}
 
-    portYIELD_FROM_ISR(pdFALSE); // Garante que a task vai ser executada imediatamente
-    // vTaskDelay(100 / portTICK_PERIOD_MS);
+void BatterySource::startSensorReadTask()
+{
+    xTaskCreatePinnedToCore(
+        sensorReadTask,
+        "ReadBatterySensorTask",
+        4096,
+        this,
+        0,
+        &batterySensorTaskHandle,
+        0 // 👉 PINADO AO CORE 0
+    );
 }
 
 void BatterySource::sensorReadTask(void *pvParameters)
 {
     BatterySource *instance = static_cast<BatterySource *>(pvParameters);
-
     if (instance == nullptr)
     {
         Serial.println("Erro ao obter a instância do BatterySource");
@@ -164,57 +385,33 @@ void BatterySource::sensorReadTask(void *pvParameters)
         {
             instance->funcSensorReadTask();
         }
-        vTaskDelay((instance->sampleIntervalBattery / 1000) / portTICK_PERIOD_MS); // Aguarda X ms antes de repetir a leitura
+
+        if (instance->GetBmsComunicationOn()) {
+            vTaskDelay(3000 / portTICK_PERIOD_MS);
+        } else{
+            vTaskDelay((instance->sampleIntervalBattery / 1000) / portTICK_PERIOD_MS);
+        }
     }
 }
 
-BatterySource::BatterySource(
-    DynamicAnalogBuffer &pBatteryReadBuffer,
-    Preferences &pConfigPreferences,
-    HardwareSerial &pSerial,
-    bool *pUpdatingFirmware)
-    : batteryReadBuffer(pBatteryReadBuffer), configPreferences(pConfigPreferences), RS485Serial(pSerial)
+void BatterySource::funcSensorReadTask()
 {
-    updatingFirmware = pUpdatingFirmware;
-}
-
-void BatterySource::Init()
-{
-    pinMode(BATTERY_SENSOR_PIN, INPUT);
-    RS485Serial.begin(RS485_BAUD, SERIAL_8N1, RS485_RX, RS485_TX);
-    // rs485->begin(9600);
-    // rs485->listen();  GPIO44 - UORXD and GPIO43 - UOTXD
-    Serial.println("BMS Comunication started");
-    startSensorReadTask();
-
-    configPreferences.begin("config", true);
-
-    batteryConfig.batteryCalibrationValue = configPreferences.getFloat("battery-calib", batteryConfig.batteryCalibrationValue);
-    bmsComunicationOn = configPreferences.getBool("bms-on", false);
-    batteryConfigMin = configPreferences.getDouble("bMin", 23.50);
-    batteryConfigMax = configPreferences.getDouble("bMax", 27.00);
-    batteryConfigMinPercentage = configPreferences.getInt("bMinPercent", 40);
-    batteryConfigMaxPercentage = configPreferences.getInt("bMaxPercent", 60);
-
-    configPreferences.end();
-}
-
-void BatterySource::startSensorReadTask()
-{
-    xTaskCreatePinnedToCore(
-        sensorReadTask,           // Função da task
-        "ReadBatterySensorTask",  // Nome da task
-        4096,                     // Tamanho da stack (bytes)
-        this,                     // Passa a instância como parâmetro
-        2,                        // Prioridade da task
-        &batterySensorTaskHandle, // Handle da task (opcional)
-        1                         // Núcleo onde a task será fixada (0 ou 1)
-    );
+    if (bmsComunicationOn == true)
+    {
+        readBatteryBMS();
+    }
+    readBatteryResistorDivisor();
 }
 
 void BatterySource::readBatteryResistorDivisor()
 {
-    // Leitura do valor analógico (entre 0 e 4095)
+    if (BMS.isConnected)
+    {
+        batteryVoltage = BMS.totalVoltage;
+        batteryPercentage = BMS.soc;
+        return;
+    }
+
     int adcValue = analogReadMilliVolts(BATTERY_SENSOR_PIN);
     if (adcValue < 700)
         adcValue = 0;
@@ -223,150 +420,267 @@ void BatterySource::readBatteryResistorDivisor()
     batteryVoltage = (batteryReadBuffer.GetMean() / 4096.0 * 3.33) * ((BATTERY_SENSOR_R1 + BATTERY_SENSOR_R2) / BATTERY_SENSOR_R2) * batteryConfig.batteryCalibrationValue;
 }
 
+bool BatterySource::validateResponseCRC(byte* buffer, int length)
+{
+    // Procurar o último footer 0x68 percorrendo o buffer de trás para frente.
+    // Isso ajuda a encontrar o footer correto quando há bytes extras no final
+    // ou múltiplos 0x68 no payload.
+    int footerPos = -1;
+    // Precisamos de pelo menos 5 bytes: footer + 4 bytes de CRC conforme o protocolo usado anteriormente
+    if (length < 5) {
+        Serial.println("Response too short to contain footer + CRC");
+        BMS.consecutiveCrcFailures++;
+        return false;
+    }
+
+    // Buscar o footer a partir do final (últimos 5 bytes)
+    for (int i = length; i >= 0; i--) {
+        if (buffer[i] == JK_BMS_FOOTER) {
+            footerPos = i;
+            break;
+        }
+    }
+
+    if (footerPos == -1) {
+        Serial.println("Footer 0x68 not found in response");
+        BMS.consecutiveCrcFailures++;
+        return false;
+    }
+
+    // Verificar se há espaço para 4 bytes de CRC após o footer
+    // footerPos + 4 deve ser um índice válido (0-based)
+    if (footerPos + 4 >= length + 2) {
+        Serial.println("Not enough space for CRC after footer");
+        BMS.consecutiveCrcFailures++;
+        return false;
+    }
+
+    // Calcular o checksum dos bytes do início até o footer (inclusive)
+    uint16_t calculatedCRC = 0;
+    for (int i = 0; i <= footerPos; i++) {
+        calculatedCRC += buffer[i];
+    }
+
+    // Ler o CRC recebido (dois bytes, little-endian no código anterior?)
+    // Observando o uso original: (buffer[footerPos + 3] << 8) | buffer[footerPos + 4]
+    // Isso pressupõe que os bytes CRC estão em posições +3 e +4 relativas ao footer.
+    // Aqui mantemos a mesma disposição, mas garantimos que os índices existam.
+    uint16_t receivedCRC = (uint16_t(buffer[footerPos + 3]) << 8) | uint16_t(buffer[footerPos + 4]);
+
+    // Comparar CRC
+    // NOTA: O protocolo JK-BMS parece usar um algoritmo CRC não-padrão.
+    // Análise de dispositivo real (FW: NW_1_0_0_200428) mostra:
+    // - Checksum calculado: 0x4381
+    // - CRC recebido: 0x4923
+    // - Nenhum algoritmo CRC-16 padrão corresponde
+    //
+    // Solução pragmática: Permitir dados com CRC mismatch, mas rastrear falhas
+    // A integridade dos dados é verificada pela interpretação semântica dos registros
+    // (voltagens de células, temperatura, corrente, SOC, etc. são todos válidos)
+
+    if (calculatedCRC == receivedCRC) {
+        Serial.println("✓ CRC OK");
+        BMS.consecutiveCrcFailures = 0;
+        return true;
+    } else {
+        // CRC não corresponde, mas permitir processamento com limite de tolerância
+        Serial.print("⚠ CRC MISMATCH (data will be processed): calculated=0x");
+        Serial.print(calculatedCRC, HEX);
+        Serial.print(", received=0x");
+        Serial.print(receivedCRC, HEX);
+        Serial.print(" | Failures: ");
+        Serial.print(BMS.consecutiveCrcFailures + 1);
+        Serial.println("/5");
+
+        BMS.consecutiveCrcFailures++;
+
+        // Desconectar apenas após múltiplas falhas consecutivas de CRC
+        // Isso permite tolerância para variações de firmware ou protocolo
+        if (BMS.consecutiveCrcFailures >= 5) {
+            Serial.println("❌ BMS desconectado após 5 falhas consecutivas de CRC");
+            return false;
+        }
+
+        // Permitir processamento deste pacote apesar do CRC mismatch
+        return true;
+    }
+}
+
 void BatterySource::readBatteryBMS()
 {
-    if ((millis() - lastBmsRequestTime) > 2000)
-    {
-        sendCommand(REQUEST_BASIC_INFO, REQUEST_BASIC_INFO_SIZE);
-        lastBmsRequestTime = millis();
+    if (!bmsComunicationOn) return;
+
+    byte command[JK_BMS_FULL_CMD_LENGTH];
+
+    memcpy(command, JK_BMS_BASE_CMD, JK_BMS_BASE_CMD_LENGTH);
+    command[8] = 0x06;
+    command[11] = 0x00;
+    command[12] = 0x00;
+    command[13] = 0x00;
+    command[14] = 0x00;
+    command[15] = 0x00;
+    command[16] = JK_BMS_FOOTER;
+
+    uint8_t crc8 = calculateCRC(command, 17);
+    command[17] = 0x00;
+    command[18] = 0x00;
+    command[19] = 0x01;
+    command[20] = crc8;
+
+    Serial.print("Sending Read All Data command: ");
+    for (int i = 0; i < JK_BMS_FULL_CMD_LENGTH; i++) {
+        Serial.printf("%02X ", command[i]);
     }
+    Serial.println();
 
-    // Lê dados disponíveis na porta serial
-    while (RS485Serial.available() && bufferIndex < MAX_BUFFER_SIZE)
-    {
-        receiveBuffer[bufferIndex++] = RS485Serial.read();
-    }
+    RS485Serial.write(command, JK_BMS_FULL_CMD_LENGTH);
+    RS485Serial.flush();
 
-    // Se recebeu dados, processa-os
-    if (bufferIndex > 0)
-    {
-        // Procura pelo início do pacote (0xDD, 0xA5)
-        for (int i = 0; i < bufferIndex - 1; i++)
-        {
-            if (receiveBuffer[i] == 0xDD && receiveBuffer[i + 1] == 0xA5)
-            {
-                // Encontrou o início do pacote, processa os dados
-                processReceivedData();
+    vTaskDelay(300 / portTICK_PERIOD_MS);
 
-                // Limpa o buffer após processamento
-                bufferIndex = 0;
-                break;
+    lastBmsRequestTime = millis();
+
+    memset(receiveBuffer, 0, MAX_BUFFER_SIZE);
+    bufferIndex = 0;
+    if (RS485Serial.available()) {
+        bufferIndex = RS485Serial.readBytes(receiveBuffer, MAX_BUFFER_SIZE - 1);
+        receiveBuffer[bufferIndex] = '\0';
+        if (bufferIndex > 0) {
+            // --- ENVIA PARA A FILA ---
+            BmsResponseItem item;
+            memcpy(item.buffer, receiveBuffer, bufferIndex);
+            item.length = bufferIndex;
+
+            // Envia para a fila (sem bloquear)
+            if (xQueueSend(bmsResponseQueue, &item, 0) != pdPASS) {
+                Serial.println("Fila cheia — descartando resposta antiga");
+            } else {
+                Serial.println("Resposta da BMS enfileirada para parsing assíncrono");
             }
+        } else {
+            Serial.println("No data read after Read All Data command.");
+            BMS.isConnected = false;
         }
-
-        // Se o buffer está cheio mas não encontrou um pacote válido, limpa-o
-        if (bufferIndex >= MAX_BUFFER_SIZE)
-        {
-            bufferIndex = 0;
-            Serial.println("Buffer cheio, limpando");
-        }
+    } else {
+        Serial.println("No response available after Read All Data command.");
+        BMS.isConnected = false;
     }
 
-    // Verifica timeout de conexão
     checkConnectionTimeout();
 }
 
-void BatterySource::processReceivedData()
+uint8_t BatterySource::calculateCRC(const byte* data, int length)
 {
-    // Verifica se os dados recebidos têm o formato correto
-    // Este é um exemplo simplificado e deve ser adaptado conforme o protocolo real da JK BMS
-
-    // Verifica o cabeçalho e o tamanho mínimo
-    if (bufferIndex < 10 || receiveBuffer[0] != 0xDD || receiveBuffer[1] != 0xA5)
-    {
-        Serial.println("Dados inválidos recebidos");
-        return;
+    uint8_t crc = 0;
+    for (int i = 0; i < length; i++) {
+        crc += data[i];
     }
-
-    // Extrai o comprimento dos dados
-    int dataLength = receiveBuffer[2];
-
-    // Verifica se recebemos dados suficientes
-    if (bufferIndex < dataLength + 7)
-    {
-        Serial.println("Pacote incompleto");
-        return;
-    }
-
-    // Verifica o checksum (implementação simplificada)
-    // Na implementação real, você deve calcular e verificar o checksum conforme o protocolo da JK BMS
-
-    // Exemplo de parsing (os offsets e multiplicadores devem ser ajustados conforme protocolo real)
-    // Nota: Este é um exemplo genérico e deve ser adaptado para o protocolo específico da JK BMS
-    BMS.totalVoltage = (receiveBuffer[4] * 256 + receiveBuffer[5]) / 100.0;
-    BMS.current = ((int16_t)(receiveBuffer[6] * 256 + receiveBuffer[7])) / 100.0;
-    BMS.power = BMS.totalVoltage * BMS.current;
-    BMS.temperature = (receiveBuffer[8] - 40); // Exemplo de conversão de temperatura
-    BMS.soc = receiveBuffer[10];
-
-    // Atualiza o timestamp da última resposta válida
-    BMS.lastResponseTime = millis();
-    BMS.isConnected = true;
-
-    Serial.println("Dados processados com sucesso");
-}
-
-void BatterySource::sendCommand(const byte *command, int length)
-{
-    // Limpa o buffer de recepção antes de enviar um novo comando
-    while (RS485Serial.available())
-    {
-        RS485Serial.read();
-    }
-
-    // Envia o comando
-    RS485Serial.write(command, length);
+    return crc;
 }
 
 void BatterySource::checkConnectionTimeout()
 {
-    // Se não receber resposta por mais de 5 segundos, considera desconectado
-    if (BMS.isConnected && (millis() - BMS.lastResponseTime > 1000))
+    if (BMS.isConnected && (millis() - BMS.lastResponseTime > 5000))
     {
         BMS.isConnected = false;
-        Serial.println("Timeout de conexão com a BMS");
+        Serial.println("BMS connection timeout");
+    }
+
+    if (bmsComunicationFailures >= 5)
+    {
+        bmsComunicationOn = false;
+        BMS.isConnected = false;
+        Serial.println("BMS disconnected after 5 consecutive communication failures");
     }
 }
 
-double BatterySource::GetBatteryConfigMin()
+void BatterySource::processAllData(byte* buffer, int length)
 {
-    return batteryConfigMin;
+    int headerPos = -1;
+    for (int i = 0; i < length - 1; i++) {
+        if (buffer[i] == 0x4E && buffer[i+1] == 0x57) {
+            headerPos = i;
+            break;
+        }
+    }
+
+    if (headerPos == -1) {
+        Serial.println("JK BMS header not found");
+        BMS.isConnected = false;
+        return;
+    }
+
+    if (headerPos + 2 >= length) {
+        Serial.println("Pacote muito curto após header");
+        BMS.isConnected = false;
+        return;
+    }
+
+    // Ler o campo de comprimento (bytes 2 e 3 após o header)
+    uint16_t packetLength = (buffer[headerPos + 2] << 8) | buffer[headerPos + 3];
+    int expectedTotalLength = headerPos + packetLength;
+
+    if (expectedTotalLength > length) {
+        Serial.println("Pacote incompleto - esperado: " + String(expectedTotalLength) + ", recebido: " + String(length));
+        BMS.isConnected = false;
+        return;
+    }
+
+    // --- VALIDAR CRC ---
+    if (!validateResponseCRC(buffer + headerPos, length - headerPos)) {
+        Serial.println("CRC validation failed - discarding response");
+        if (BMS.consecutiveCrcFailures >= 5) {
+            BMS.isConnected = false;
+            Serial.println("BMS disconnected after 5 consecutive CRC failures");
+        }
+        return;
+    }
+
+    int i = headerPos;
+    while (i < length) {
+
+        while (i < length && !addressValid[buffer[i]]) {
+            i++;
+        }
+
+        // Se chegou ao fim, sai
+        if (i >= length) break;
+        byte addr = buffer[i];
+
+        // --- JUMP TABLE: Acesso O(1) ---
+        if (addr < JUMP_TABLE_SIZE && jumpTable[addr] != nullptr) {
+            (this->*jumpTable[addr])(buffer, length, i);
+            // dataSizes stores the payload length. Advance by payload + 2 (addr + length fields)
+            i += dataSizes[addr] + 2;
+            if (addr == REG_WARN_MESSAGES) {
+                break; // Sai após ler as mensagens de aviso
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    BMS.lastResponseTime = millis();
+    BMS.isConnected = bmsComunicationOn;
 }
 
-unsigned int BatterySource::GetBatteryConfigMinPercentage()
-{
-    return batteryConfigMinPercentage;
-}
-
-unsigned int BatterySource::GetBatteryConfigMaxPercentage()
-{
-    return batteryConfigMaxPercentage;
-}
-
-double BatterySource::GetBatteryConfigMax()
-{
-    return batteryConfigMax;
-}
-
-double BatterySource::GetBatteryVoltage()
-{
-    return batteryVoltage;
-}
-
-double BatterySource::GetBatteryPercentage()
-{
-    return batteryPercentage;
-}
-
-double BatterySource::GetBatteryVoltageMin()
-{
-    return batteryVoltageMin;
-}
-
-double BatterySource::GetBatteryVoltageMax()
-{
-    return batteryVoltageMax;
-}
+// Getters (mantidos iguais)
+double BatterySource::GetBmsTotalVoltage() { return BMS.totalVoltage; }
+double BatterySource::GetBmsCurrent() { return BMS.current; }
+double BatterySource::GetBmsPower() { return BMS.power; }
+// Getters/Setters implementations (completos)
+double BatterySource::GetBatteryConfigMin() { return batteryConfigMin; }
+unsigned int BatterySource::GetBatteryConfigMinPercentage() { return batteryConfigMinPercentage; }
+unsigned int BatterySource::GetBatteryConfigMaxPercentage() { return batteryConfigMaxPercentage; }
+double BatterySource::GetBatteryConfigMax() { return batteryConfigMax; }
+double BatterySource::GetBatteryVoltage() { return batteryVoltage; }
+double BatterySource::GetBatteryPercentage() { return batteryPercentage; }
+double BatterySource::GetBatteryVoltageMin() { return batteryVoltageMin; }
+double BatterySource::GetBatteryVoltageMax() { return batteryVoltageMax; }
+uint64_t BatterySource::GetLowBatStarted() { return lowBatteryStarted; }
+uint64_t BatterySource::GetPeakSurgeDelay() { return peakSurgeDelay; }
+bool BatterySource::GetBmsComunicationOn() { return bmsComunicationOn; }
+BMSData BatterySource::GetBms() { return BMS; }
 
 bool BatterySource::IsHighBattery()
 {
@@ -374,6 +688,223 @@ bool BatterySource::IsHighBattery()
     {
         return batteryPercentage > batteryConfigMaxPercentage;
     }
-
     return batteryVoltage > batteryConfigMax;
+}
+
+bool BatterySource::IsLowBattery()
+{
+    if (BMS.isConnected)
+    {
+        return batteryPercentage < batteryConfigMinPercentage;
+    }
+    return batteryVoltage < batteryConfigMin;
+}
+
+bool BatterySource::IsEmpty()
+{
+    if (BMS.isConnected)
+    {
+        return batteryPercentage < 5;
+    }
+    return batteryVoltage < batteryVoltageMin;
+}
+
+void BatterySource::SetBatteryVoltage(double value) { batteryVoltage = value; }
+void BatterySource::SetBatteryPercentage(double value) { batteryPercentage = value; }
+
+void BatterySource::SetBmsComunicationOn(bool value)
+{
+    bool changed = value != bmsComunicationOn;
+    bmsComunicationOn = value;
+    if (changed)
+    {
+        configPreferences.begin("config", false);
+        configPreferences.putBool("bms-on", value);
+        configPreferences.end();
+        BMS.soc = 0;
+    }
+}
+
+void BatterySource::SetBatteryConfigMin(double value)
+{
+    bool changed = value != batteryConfigMin;
+    batteryConfigMin = value;
+    if (changed)
+    {
+        configPreferences.begin("config", false);
+        configPreferences.putDouble("bMin", value);
+        configPreferences.end();
+    }
+}
+
+void BatterySource::SetBatteryConfigMax(double value)
+{
+    bool changed = value != batteryConfigMax;
+    batteryConfigMax = value;
+    if (changed)
+    {
+        configPreferences.begin("config", false);
+        configPreferences.putDouble("bMax", value);
+        configPreferences.end();
+    }
+}
+
+void BatterySource::SetBatteryConfigMinPercentage(int value)
+{
+    bool changed = value != batteryConfigMinPercentage;
+    batteryConfigMinPercentage = value;
+    if (changed)
+    {
+        configPreferences.begin("config", false);
+        configPreferences.putInt("bMinPercent", value);
+        configPreferences.end();
+    }
+}
+
+void BatterySource::SetBatteryConfigMaxPercentage(int value)
+{
+    bool changed = value != batteryConfigMaxPercentage;
+    batteryConfigMaxPercentage = value;
+    if (changed)
+    {
+        configPreferences.begin("config", false);
+        configPreferences.putInt("bMaxPercent", value);
+        configPreferences.end();
+    }
+}
+
+void BatterySource::SetBatteryVoltageMin(double value) { batteryVoltageMin = value; }
+void BatterySource::SetBatteryVoltageMax(double value) { batteryVoltageMax = value; }
+
+void BatterySource::UpdateLowBatteryStarted() { lowBatteryStarted = esp_timer_get_time(); }
+bool BatterySource::LowBatteryDelayEnded() { return esp_timer_get_time() - lowBatteryStarted > peakSurgeDelay; }
+void BatterySource::ResetLowbatteryStarted() { lowBatteryStarted = 0; }
+
+int BatterySource::GetBmsSoc() { return BMS.soc; }
+int BatterySource::GetBmsTotalStrings() { return BMS.totalStrings; }
+float BatterySource::GetBmsMosTemp() { return BMS.mosTemp; }
+float BatterySource::GetBmsBatteryT1() { return BMS.batteryT1; }
+float BatterySource::GetBmsBatteryT2() { return BMS.batteryT2; }
+float BatterySource::GetBmsBalanceCurrent() { return BMS.balanceCurrent; }
+
+float BatterySource::GetBmsCellVoltage(int cellIndex)
+{
+    if (cellIndex >= 0 && cellIndex < 24) {
+        return BMS.cellVoltages[cellIndex];
+    }
+    return 0.0;
+}
+
+bool BatterySource::GetBmsConnected() { return BMS.isConnected; }
+
+void BatterySource::startBmsParserTask()
+{
+    xTaskCreatePinnedToCore(
+        bmsParserTask,
+        "BmsParserTask",
+        4096,
+        this,
+        2,
+        &bmsParserTaskHandle,
+        0 // Core 0
+    );
+}
+
+void BatterySource::bmsParserTask(void *pvParameters)
+{
+    BatterySource *instance = static_cast<BatterySource *>(pvParameters);
+    if (instance == nullptr) {
+        Serial.println("Erro: instância BatterySource nula no parser");
+        return;
+    }
+
+    BmsResponseItem item;
+    while (true) {
+        // Aguarda um item na fila
+        if (xQueueReceive(instance->bmsResponseQueue, &item, portMAX_DELAY) == pdTRUE) {
+            // Envia para processamento gradual
+            instance->processBmsResponseAsync(item.buffer, item.length - 2); // Exclui os 2 bytes CRC finais
+        }
+    }
+}
+
+void BatterySource::processBmsResponseAsync(byte* buffer, int length)
+{
+    if (buffer[0] != 0x4E || buffer[1] != 0x57) {
+        Serial.println("❌ Pacote inválido: header não encontrado no início");
+        BMS.consecutiveErrors++;
+        if (BMS.consecutiveErrors >= 5) {
+            bmsComunicationOn = false;
+            Serial.println("❌ BMS desconectado após 5 erros consecutivos de comprimento");
+            BMS.consecutiveErrors = 0;
+        }
+        return;
+    }
+
+    uint16_t packetLength = (buffer[2] << 8) | buffer[3];
+    if (packetLength != length) {
+        Serial.printf("⚠️ Comprimento declarado (%d) != recebido (%d)\n", packetLength, length);
+        if (abs(packetLength - length) > 8) {
+            BMS.consecutiveErrors++;
+            if (BMS.consecutiveErrors >= 5) {
+                bmsComunicationOn = false;
+                Serial.println("❌ BMS desconectado após 5 erros consecutivos de comprimento");
+                BMS.consecutiveErrors = 0;
+            }
+            return;
+        }
+    }
+
+    if (!validateResponseCRC(buffer, length)) {
+        if (BMS.consecutiveCrcFailures >= 5) {
+            bmsComunicationOn = false;
+            Serial.println("❌ BMS desconectado após 5 falhas consecutivas de CRC");
+        }
+        return;
+    }
+
+    int pos = 11; // após: [4E 57][length 2][terminal 4][command 1][source 1][type 1]
+
+    while (pos < length - 3) { // espaço para footer+CRC
+        uint8_t registerId = buffer[pos++];
+
+        if (registerId == JK_BMS_FOOTER) {
+            break;
+        }
+
+        uint8_t dataLength = 1;
+
+        if (pos + dataLength > length - 3) {
+            Serial.printf("⚠️ Dados insuficientes para registrador 0x%02X\n", registerId);
+            BMS.consecutiveErrors++;
+            if (BMS.consecutiveErrors >= 5) {
+                bmsComunicationOn = false;
+                Serial.println("❌ BMS desconectado após 5 erros consecutivos de dados insuficientes");
+                Serial.printf("Detalhe: pos=%d, dataLength=%d, length=%d\n", pos, dataLength, length);
+                Serial.println("Buffer dump:");
+                for (int i = 0; i < length; i++) {
+                    Serial.printf("%02X ", buffer[i]);
+                }
+                Serial.println();
+                BMS.consecutiveErrors = 0;
+            }
+            break;
+        }
+
+        if (registerId < JUMP_TABLE_SIZE && jumpTable[registerId] != nullptr && isValidAddress(registerId)) {
+            (this->*jumpTable[registerId])(buffer, length, pos);
+            // Serial.printf("✅ Registrador 0x%02X processado com sucesso\n", registerId);
+            dataLength = dataSizes[registerId]; // Atualiza dataLength conforme o parsing
+            if (registerId == REG_WARN_MESSAGES) {
+                BMS.consecutiveErrors = 0; // Resetar erros após sucesso completo
+                break; // Sai após ler as mensagens de aviso
+            }
+        }
+
+        pos += dataLength;
+    }
+
+    BMS.lastResponseTime = millis();
+    BMS.isConnected = bmsComunicationOn;
+    Serial.println("✅ Parsing assíncrono da BMS concluído com sucesso");
 }

@@ -1,0 +1,223 @@
+# MQTT Auto-Discovery for Dashboard Cards
+# These will create dashboard cards automatically in Home Assistant
+
+# =============================================================================
+# ENERGY OVERVIEW DASHBOARD
+# =============================================================================
+
+# Energy Overview Card
+homeassistant/card/energy_overview/config
+{
+    "type": "entities",
+    "title": "Energy Overview",
+    "show_header_toggle": false,
+    "entities": [
+        {
+            "entity": "sensor.total_solar_energy_generated",
+            "name": "Solar Generated",
+            "icon": "mdi:solar-power"
+        },
+        {
+            "entity": "sensor.total_battery_energy_charged",
+            "name": "Battery Charged",
+            "icon": "mdi:battery-charging"
+        },
+        {
+            "entity": "sensor.total_battery_energy_discharged",
+            "name": "Battery Discharged",
+            "icon": "mdi:battery-minus"
+        },
+        {
+            "entity": "sensor.total_utility_energy_consumed",
+            "name": "Utility Consumed",
+            "icon": "mdi:transmission-tower"
+        },
+        {
+            "entity": "sensor.battery_efficiency",
+            "name": "Battery Efficiency",
+            "icon": "mdi:percent"
+        }
+    ],
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Daily Energy Card
+homeassistant/card/daily_energy/config
+{
+    "type": "entities",
+    "title": "Today's Energy",
+    "show_header_toggle": false,
+    "entities": [
+        {
+            "entity": "sensor.daily_solar_energy_generated",
+            "name": "Solar Today",
+            "icon": "mdi:solar-power"
+        },
+        {
+            "entity": "sensor.daily_utility_energy_consumed",
+            "name": "Utility Today",
+            "icon": "mdi:transmission-tower"
+        },
+        {
+            "entity": "sensor.daily_battery_energy_charged",
+            "name": "Battery Charged Today",
+            "icon": "mdi:battery-charging"
+        },
+        {
+            "entity": "sensor.daily_solar_savings",
+            "name": "Savings Today",
+            "icon": "mdi:currency-usd"
+        }
+    ],
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Energy History Graph
+homeassistant/card/energy_history/config
+{
+    "type": "history-graph",
+    "title": "24-Hour Energy Flow",
+    "hours_to_show": 24,
+    "refresh_interval": 30,
+    "entities": [
+        {
+            "entity": "sensor.bms_power",
+            "name": "Battery Power"
+        },
+        {
+            "entity": "sensor.solar_generation_power",
+            "name": "Solar Power"
+        },
+        {
+            "entity": "sensor.utility_consumption_power",
+            "name": "Utility Power"
+        }
+    ],
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# System Statistics Card
+homeassistant/card/system_statistics/config
+{
+    "type": "entities",
+    "title": "System Statistics",
+    "show_header_toggle": false,
+    "entities": [
+        {
+            "entity": "sensor.estimated_battery_cycles",
+            "name": "Battery Cycles",
+            "icon": "mdi:counter"
+        },
+        {
+            "entity": "sensor.avg_daily_solar_generation",
+            "name": "Avg Daily Solar",
+            "icon": "mdi:solar-power"
+        },
+        {
+            "entity": "sensor.avg_daily_utility_consumption",
+            "name": "Avg Daily Utility",
+            "icon": "mdi:transmission-tower"
+        },
+        {
+            "entity": "sensor.estimated_solar_savings",
+            "name": "Total Solar Savings",
+            "icon": "mdi:currency-usd"
+        }
+    ],
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Real-time Energy Flow Card
+homeassistant/card/real_time_energy/config
+{
+    "type": "entities",
+    "title": "Real-time Energy Flow",
+    "entities": [
+        {
+            "entity": "sensor.bms_current",
+            "name": "Battery Current",
+            "icon": "mdi:current-ac"
+        },
+        {
+            "entity": "sensor.bms_total_voltage",
+            "name": "Battery Voltage",
+            "icon": "mdi:battery"
+        },
+        {
+            "entity": "sensor.bms_power",
+            "name": "Battery Power",
+            "icon": "mdi:lightning-bolt"
+        },
+        {
+            "entity": "sensor.power_source_status",
+            "name": "Active Power Source",
+            "icon": "mdi:transmission-tower"
+        },
+        {
+            "entity": "sensor.bms_soc",
+            "name": "Battery State of Charge",
+            "icon": "mdi:battery-heart"
+        }
+    ],
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Configuration Card
+homeassistant/card/configuration/config
+{
+    "type": "entities",
+    "title": "System Configuration",
+    "entities": [
+        {
+            "entity": "number.battery_capacity_kwh",
+            "name": "Battery Capacity",
+            "icon": "mdi:battery"
+        },
+        {
+            "entity": "number.utility_rate_per_kwh",
+            "name": "Utility Rate",
+            "icon": "mdi:currency-usd"
+        },
+        {
+            "entity": "binary_sensor.bms_connected",
+            "name": "BMS Connected",
+            "icon": "mdi:battery"
+        },
+        {
+            "entity": "sensor.bms_cell_count",
+            "name": "Battery Cells",
+            "icon": "mdi:counter"
+        }
+    ],
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}

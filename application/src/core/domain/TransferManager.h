@@ -31,6 +31,7 @@ private:
 
     TaskHandle_t syncWatchTaskHandle = NULL;
     TaskHandle_t noBreakTaskHandle = NULL;
+    unsigned long noBreakLastHeartbeat = 0;
 
     void startSyncWatchTask();
     void funcSyncWatchTask(void *pvParameters);
@@ -61,5 +62,9 @@ public:
     void Init();
     void TransferToDefined(bool pTransferSincronized, bool pSyncWatchTransfer = false);
     void SetDefinedSource(EnergySource &source);
+
+    // Task monitoring
+    bool IsNoBreakTaskHealthy() const;
+    void EnsureNoBreakTaskRunning();
 
 };

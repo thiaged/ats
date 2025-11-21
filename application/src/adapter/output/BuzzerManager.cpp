@@ -88,6 +88,18 @@ void BuzzerManager::PlaySyncedSound()
     xQueueSend(soundQueue, &cmd, 0);
 }
 
+void BuzzerManager::PlayErrorSound()
+{
+    // Two-beep error pattern with a short pause between
+    SoundSequence seq = {
+        { 800, 0, 800 },
+        { 200, 80, 300 },
+        3
+    };
+    SoundCommand cmd = { seq, 0 };
+    xQueueSend(soundQueue, &cmd, 0);
+}
+
 void BuzzerManager::PlayClickSound()
 {
     SoundSequence seq = {

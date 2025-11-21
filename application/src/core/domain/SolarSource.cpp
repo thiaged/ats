@@ -10,7 +10,7 @@ SolarSource::SolarSource(
 {
     configPreferences.begin("config", true);
     buffer.SetDcOffset(configPreferences.getInt("sol-offset", 1940)); //maximo 15 char on name
-    voltageCalibration = configPreferences.getFloat("ac-calib-sol", 0.202);
+    voltageCalibration = configPreferences.getFloat("ac-calib-sol", 0.195);
     configPreferences.end();
 }
 

@@ -60,5 +60,13 @@
         "condition_variable": "cpp",
         "iostream": "cpp"
     },
-    "C_Cpp.errorSquiggles": "enabledIfIncludesResolve"
+    "C_Cpp.errorSquiggles": "enabledIfIncludesResolve",
+    "vsmqtt.brokerProfiles": [
+        {
+            "name": "mqtt local",
+            "host": "localhost",
+            "port": 1883,
+            "clientId": "vsmqtt_client_1e22"
+        }
+    ]
 }

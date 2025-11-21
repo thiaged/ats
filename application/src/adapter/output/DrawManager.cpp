@@ -69,5 +69,5 @@ void DrawManager::StartDrawTask()
     Serial.println("fila de desenho criada");
 
     // Inicia a tarefa de desenho
-    xTaskCreate(drawTask, "DrawTask", 8100, this, 2, NULL);
+    xTaskCreatePinnedToCore(drawTask, "DrawTask", 8100, this, 4, NULL, 1); //TODO: add handle
 }

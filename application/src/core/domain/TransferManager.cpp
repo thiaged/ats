@@ -1,6 +1,9 @@
 #include "TransferManager.h"
 #include <adapter/output/ScreenWave.h>
 #include <driver/rtc_io.h>
+#include <Arduino.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 TransferManager::TransferManager(
     EnergySource **pActiveSource,
@@ -62,7 +65,7 @@ void TransferManager::TransferToDefined(bool pTransferSincronized, bool pSyncWat
         return;
     }
 
-    if (pSyncWatchTransfer == false && millis() < lastTransfered + delayTransferProtect)
+    if (pSyncWatchTransfer == false && (millis() - lastTransfered) < (unsigned long)delayTransferProtect)
     {
         Serial.println("Fast jump protect");
         transfering = false;
@@ -109,7 +112,7 @@ void TransferManager::startSyncWatchTask()
 void TransferManager::funcSyncWatchTask(void *pvParameters)
 {
     Serial.println("syncwatch task iniciada");
-    unsigned long waitSyncLimit = millis() + 120000;
+    unsigned long syncStart = millis();
     *inactivityTime = millis();
 
     while (true && !(*updatingFirmware))
@@ -137,7 +140,7 @@ void TransferManager::funcSyncWatchTask(void *pvParameters)
             break;
         }
 
-        if (millis() > waitSyncLimit)
+        if ((millis() - syncStart) > 180000UL)
         {
             Serial.println("Long time waiting sync.");
 
@@ -176,11 +179,32 @@ void TransferManager::startNoBreakTask()
     }
 }
 
+void TransferManager::EnsureNoBreakTaskRunning()
+{
+    if (noBreakTaskHandle == NULL)
+    {
+        startNoBreakTask();
+        return;
+    }
+    eTaskState state = eTaskGetState(noBreakTaskHandle);
+    if (state == eDeleted || state == eInvalid)
+    {
+        noBreakTaskHandle = NULL;
+        startNoBreakTask();
+    }
+}
+
+bool TransferManager::IsNoBreakTaskHealthy() const
+{
+    return noBreakLastHeartbeat != 0 && (millis() - noBreakLastHeartbeat) < 2000;
+}
+
 void TransferManager::funcNoBreakTask(void *pvParameters)
 {
     Serial.println("nobreak task iniciada");
     while (true)
     {
+        noBreakLastHeartbeat = millis();
         if (transfering == true || *updatingFirmware == true)
         {
             // Serial.println("transfering");

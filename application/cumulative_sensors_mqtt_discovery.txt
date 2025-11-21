@@ -1,0 +1,426 @@
+# MQTT Auto-Discovery Topics for Cumulative Energy Sensors
+# Copy and paste these into your MQTT broker to auto-discover cumulative sensors
+
+# =============================================================================
+# BATTERY ENERGY CUMULATIVE SENSORS
+# =============================================================================
+
+# Battery Charging Power (Template Sensor)
+homeassistant/sensor/battery_charging_power/config
+{
+    "name": "Battery Charging Power",
+    "unique_id": "battery_charging_power_ats_thiaged",
+    "state_topic": "casa/bms/power",
+    "unit_of_measurement": "W",
+    "device_class": "power",
+    "icon": "mdi:battery-charging-50",
+    "value_template": "{% set current = states('sensor.bms_current') | float %}{% set voltage = states('sensor.bms_total_voltage') | float %}{% if current < 0 %}{{ (voltage * current * -1) | round(2) }}{% else %}0{% endif %}",
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Battery Discharging Power (Template Sensor)
+homeassistant/sensor/battery_discharging_power/config
+{
+    "name": "Battery Discharging Power",
+    "unique_id": "battery_discharging_power_ats_thiaged",
+    "state_topic": "casa/bms/power",
+    "unit_of_measurement": "W",
+    "device_class": "power",
+    "icon": "mdi:battery-minus",
+    "value_template": "{% set current = states('sensor.bms_current') | float %}{% set voltage = states('sensor.bms_total_voltage') | float %}{% if current > 0 %}{{ (voltage * current) | round(2) }}{% else %}0{% endif %}",
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Total Battery Energy Charged (Integration Sensor)
+homeassistant/sensor/total_battery_energy_charged/config
+{
+    "name": "Total Battery Energy Charged",
+    "unique_id": "total_battery_energy_charged_ats_thiaged",
+    "platform": "integration",
+    "source": "sensor.battery_charging_power",
+    "unit_prefix": "k",
+    "round": 3,
+    "unit_of_measurement": "kWh",
+    "icon": "mdi:battery-charging-50",
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Total Battery Energy Discharged (Integration Sensor)
+homeassistant/sensor/total_battery_energy_discharged/config
+{
+    "name": "Total Battery Energy Discharged",
+    "unique_id": "total_battery_energy_discharged_ats_thiaged",
+    "source": "sensor.battery_discharging_power",
+    "unit_prefix": "k",
+    "round": 3,
+    "unit_of_measurement": "kWh",
+    "icon": "mdi:battery-minus",
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Battery Round-trip Efficiency (Template Sensor)
+homeassistant/sensor/battery_efficiency/config
+{
+    "name": "Battery Round-trip Efficiency",
+    "unique_id": "battery_efficiency_ats_thiaged",
+    "state_topic": "casa/bms/power",
+    "unit_of_measurement": "%",
+    "icon": "mdi:percent",
+    "value_template": "{% set charged = states('sensor.total_battery_energy_charged') | float %}{% set discharged = states('sensor.total_battery_energy_discharged') | float %}{% if charged > 0 %}{{ ((discharged / charged) * 100) | round(1) }}{% else %}0{% endif %}",
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# =============================================================================
+# SOLAR ENERGY CUMULATIVE SENSORS
+# =============================================================================
+
+# Solar Generation Power (Template Sensor)
+homeassistant/sensor/solar_generation_power/config
+{
+    "name": "Solar Generation Power",
+    "unique_id": "solar_generation_power_ats_thiaged",
+    "state_topic": "casa/power_source/status",
+    "unit_of_measurement": "W",
+    "device_class": "power",
+    "icon": "mdi:solar-power",
+    "value_template": "{% if value == 'solar' %}{{ states('sensor.bms_power') | float + 100 }}{% else %}0{% endif %}",
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Total Solar Energy Generated (Integration Sensor)
+homeassistant/sensor/total_solar_energy_generated/config
+{
+    "name": "Total Solar Energy Generated",
+    "unique_id": "total_solar_energy_generated_ats_thiaged",
+    "platform": "integration",
+    "source": "sensor.solar_generation_power",
+    "unit_prefix": "k",
+    "round": 3,
+    "unit_of_measurement": "kWh",
+    "icon": "mdi:solar-power",
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# =============================================================================
+# UTILITY ENERGY CUMULATIVE SENSORS
+# =============================================================================
+
+# Utility Consumption Power (Template Sensor)
+homeassistant/sensor/utility_consumption_power/config
+{
+    "name": "Utility Consumption Power",
+    "unique_id": "utility_consumption_power_ats_thiaged",
+    "state_topic": "casa/power_source/status",
+    "unit_of_measurement": "W",
+    "device_class": "power",
+    "icon": "mdi:transmission-tower",
+    "value_template": "{% if value == 'utility' %}{{ states('sensor.bms_power') | float + 200 }}{% else %}0{% endif %}",
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Total Utility Energy Consumed (Integration Sensor)
+homeassistant/sensor/total_utility_energy_consumed/config
+{
+    "name": "Total Utility Energy Consumed",
+    "unique_id": "total_utility_energy_consumed_ats_thiaged",
+    "platform": "integration",
+    "source": "sensor.utility_consumption_power",
+    "unit_prefix": "k",
+    "round": 3,
+    "unit_of_measurement": "kWh",
+    "icon": "mdi:transmission-tower",
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# =============================================================================
+# DAILY ENERGY SENSORS (Reset Daily)
+# =============================================================================
+
+# Daily Battery Energy Charged
+homeassistant/sensor/daily_battery_energy_charged/config
+{
+    "name": "Daily Battery Energy Charged",
+    "unique_id": "daily_battery_energy_charged_ats_thiaged",
+    "platform": "integration",
+    "source": "sensor.battery_charging_power",
+    "unit_prefix": "k",
+    "round": 3,
+    "unit_of_measurement": "kWh",
+    "icon": "mdi:battery-charging",
+    "method": "trapezoidal",
+    "max_sub_interval": {
+        "minutes": 5
+    },
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Daily Solar Energy Generated
+homeassistant/sensor/daily_solar_energy_generated/config
+{
+    "name": "Daily Solar Energy Generated",
+    "unique_id": "daily_solar_energy_generated_ats_thiaged",
+    "platform": "integration",
+    "source": "sensor.solar_generation_power",
+    "unit_prefix": "k",
+    "round": 3,
+    "unit_of_measurement": "kWh",
+    "icon": "mdi:solar-power",
+    "method": "trapezoidal",
+    "max_sub_interval": {
+        "minutes": 5
+    },
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Daily Utility Energy Consumed
+homeassistant/sensor/daily_utility_energy_consumed/config
+{
+    "name": "Daily Utility Energy Consumed",
+    "unique_id": "daily_utility_energy_consumed_ats_thiaged",
+    "platform": "integration",
+    "source": "sensor.utility_consumption_power",
+    "unit_prefix": "k",
+    "round": 3,
+    "unit_of_measurement": "kWh",
+    "icon": "mdi:transmission-tower",
+    "method": "trapezoidal",
+    "max_sub_interval": {
+        "minutes": 5
+    },
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# =============================================================================
+# SYSTEM STATISTICS SENSORS
+# =============================================================================
+
+# Estimated Battery Cycles (Template Sensor)
+homeassistant/sensor/estimated_battery_cycles/config
+{
+    "name": "Estimated Battery Cycles",
+    "unique_id": "estimated_battery_cycles_ats_thiaged",
+    "state_topic": "casa/bms/power",
+    "unit_of_measurement": "cycles",
+    "icon": "mdi:counter",
+    "value_template": "{% set discharged = states('sensor.total_battery_energy_discharged') | float %}{% set capacity = 5.0 %}{% if capacity > 0 %}{{ (discharged / capacity) | round(1) }}{% else %}0{% endif %}",
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Average Daily Solar Generation (Statistics Sensor)
+homeassistant/sensor/avg_daily_solar_generation/config
+{
+    "name": "Average Daily Solar Generation",
+    "unique_id": "avg_daily_solar_generation_ats_thiaged",
+    "platform": "statistics",
+    "entity_id": "sensor.daily_solar_energy_generated",
+    "max_age": {
+        "days": 30
+    },
+    "sampling_size": 10000,
+    "precision": 3,
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Average Daily Utility Consumption (Statistics Sensor)
+homeassistant/sensor/avg_daily_utility_consumption/config
+{
+    "name": "Average Daily Utility Consumption",
+    "unique_id": "avg_daily_utility_consumption_ats_thiaged",
+    "platform": "statistics",
+    "entity_id": "sensor.daily_utility_energy_consumed",
+    "max_age": {
+        "days": 30
+    },
+    "sampling_size": 10000,
+    "precision": 3,
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# =============================================================================
+# COST CALCULATION SENSORS
+# =============================================================================
+
+# Estimated Solar Savings (Template Sensor)
+homeassistant/sensor/estimated_solar_savings/config
+{
+    "name": "Estimated Solar Savings",
+    "unique_id": "estimated_solar_savings_ats_thiaged",
+    "state_topic": "casa/bms/power",
+    "unit_of_measurement": "USD",
+    "icon": "mdi:currency-usd",
+    "value_template": "{% set solar_kwh = states('sensor.total_solar_energy_generated') | float %}{% set utility_rate = 0.12 %}{{ (solar_kwh * utility_rate) | round(2) }}",
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Daily Solar Savings (Template Sensor)
+homeassistant/sensor/daily_solar_savings/config
+{
+    "name": "Daily Solar Savings",
+    "unique_id": "daily_solar_savings_ats_thiaged",
+    "state_topic": "casa/bms/power",
+    "unit_of_measurement": "USD",
+    "icon": "mdi:currency-usd",
+    "value_template": "{% set daily_solar = states('sensor.daily_solar_energy_generated') | float %}{% set utility_rate = 0.12 %}{{ (daily_solar * utility_rate) | round(2) }}",
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# =============================================================================
+# CONFIGURATION INPUT NUMBERS
+# =============================================================================
+
+# Battery Capacity Input Number
+homeassistant/number/battery_capacity_kwh/config
+{
+    "name": "Battery Capacity (kWh)",
+    "unique_id": "battery_capacity_kwh_ats_thiaged",
+    "command_topic": "casa/config/battery_capacity/set",
+    "state_topic": "casa/config/battery_capacity/status",
+    "min": 1,
+    "max": 100,
+    "step": 0.1,
+    "unit_of_measurement": "kWh",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Utility Rate Input Number
+homeassistant/number/utility_rate_per_kwh/config
+{
+    "name": "Utility Rate per kWh",
+    "unique_id": "utility_rate_per_kwh_ats_thiaged",
+    "command_topic": "casa/config/utility_rate/set",
+    "state_topic": "casa/config/utility_rate/status",
+    "min": 0.01,
+    "max": 1.00,
+    "step": 0.01,
+    "unit_of_measurement": "USD/kWh",
+    "icon": "mdi:currency-usd",
+    "initial": 0.12,
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# =============================================================================
+# AUTOMATION FOR DAILY RESET (MQTT Trigger)
+# =============================================================================
+
+# Daily Reset Automation
+homeassistant/automation/daily_energy_reset/config
+{
+    "name": "Reset Daily Energy Counters",
+    "unique_id": "daily_energy_reset_ats_thiaged",
+    "trigger": {
+        "platform": "time",
+        "at": "00:00:00"
+    },
+    "action": {
+        "service": "homeassistant.reload_config_entry",
+        "target": {
+            "entity_id": [
+                "sensor.daily_battery_energy_charged",
+                "sensor.daily_solar_energy_generated",
+                "sensor.daily_utility_energy_consumed"
+            ]
+        }
+    },
+    "device": {
+        "identifiers": ["ats-thiaged"],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}

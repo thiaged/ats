@@ -1,0 +1,424 @@
+# JK BMS MQTT Discovery Topics for Home Assistant
+# Copy and paste these into your MQTT broker to auto-discover the BMS sensors
+
+homeassistant/sensor/bms_total_voltage/config
+{
+    "name": "BMS Total Voltage",
+    "unique_id": "bms_total_voltage_ats_thiaged",
+    "state_topic": "casa/bms/total_voltage",
+    "unit_of_measurement": "V",
+    "device_class": "voltage",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_current/config
+{
+    "name": "BMS Current",
+    "unique_id": "bms_current_ats_thiaged",
+    "state_topic": "casa/bms/current",
+    "unit_of_measurement": "A",
+    "device_class": "current",
+    "icon": "mdi:current-ac",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_power/config
+{
+    "name": "BMS Power",
+    "unique_id": "bms_power_ats_thiaged",
+    "state_topic": "casa/bms/power",
+    "unit_of_measurement": "W",
+    "device_class": "power",
+    "icon": "mdi:lightning-bolt",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_soc/config
+{
+    "name": "BMS State of Charge",
+    "unique_id": "bms_soc_ats_thiaged",
+    "state_topic": "casa/bms/soc",
+    "unit_of_measurement": "%",
+    "device_class": "battery",
+    "icon": "mdi:battery-heart",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_cell_count/config
+{
+    "name": "BMS Cell Count",
+    "unique_id": "bms_cell_count_ats_thiaged",
+    "state_topic": "casa/bms/cell_count",
+    "unit_of_measurement": "cells",
+    "icon": "mdi:counter",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_total_strings/config
+{
+    "name": "BMS Total Strings",
+    "unique_id": "bms_total_strings_ats_thiaged",
+    "state_topic": "casa/bms/total_strings",
+    "unit_of_measurement": "strings",
+    "icon": "mdi:battery-series",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_mos_temp/config
+{
+    "name": "BMS MOSFET Temperature",
+    "unique_id": "bms_mos_temp_ats_thiaged",
+    "state_topic": "casa/bms/mos_temp",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "icon": "mdi:thermometer",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_balance_t1/config
+{
+    "name": "BMS Balance T1",
+    "unique_id": "bms_balance_t1_ats_thiaged",
+    "state_topic": "casa/bms/balance_t1",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "icon": "mdi:thermometer",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_battery_t2/config
+{
+    "name": "BMS Battery T2",
+    "unique_id": "bms_battery_t2_ats_thiaged",
+    "state_topic": "casa/bms/battery_t2",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "icon": "mdi:thermometer",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_balance_current/config
+{
+    "name": "BMS Balance Current",
+    "unique_id": "bms_balance_current_ats_thiaged",
+    "state_topic": "casa/bms/balance_current",
+    "unit_of_measurement": "A",
+    "device_class": "current",
+    "icon": "mdi:current-ac",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/binary_sensor/bms_connected/config
+{
+    "name": "BMS Connected",
+    "unique_id": "bms_connected_ats_thiaged",
+    "state_topic": "casa/bms/connected",
+    "device_class": "connectivity",
+    "payload_on": "true",
+    "payload_off": "false",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Individual Cell Voltage Sensors (1-24)
+# Note: These will only appear when cells have voltage > 0
+
+homeassistant/sensor/bms_cell_1_voltage/config
+{
+    "name": "BMS Cell 1 Voltage",
+    "unique_id": "bms_cell_1_voltage_ats_thiaged",
+    "state_topic": "casa/bms/cell_1_voltage",
+    "unit_of_measurement": "V",
+    "device_class": "voltage",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_cell_2_voltage/config
+{
+    "name": "BMS Cell 2 Voltage",
+    "unique_id": "bms_cell_2_voltage_ats_thiaged",
+    "state_topic": "casa/bms/cell_2_voltage",
+    "unit_of_measurement": "V",
+    "device_class": "voltage",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_cell_3_voltage/config
+{
+    "name": "BMS Cell 3 Voltage",
+    "unique_id": "bms_cell_3_voltage_ats_thiaged",
+    "state_topic": "casa/bms/cell_3_voltage",
+    "unit_of_measurement": "V",
+    "device_class": "voltage",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_cell_4_voltage/config
+{
+    "name": "BMS Cell 4 Voltage",
+    "unique_id": "bms_cell_4_voltage_ats_thiaged",
+    "state_topic": "casa/bms/cell_4_voltage",
+    "unit_of_measurement": "V",
+    "device_class": "voltage",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_cell_5_voltage/config
+{
+    "name": "BMS Cell 5 Voltage",
+    "unique_id": "bms_cell_5_voltage_ats_thiaged",
+    "state_topic": "casa/bms/cell_5_voltage",
+    "unit_of_measurement": "V",
+    "device_class": "voltage",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_cell_6_voltage/config
+{
+    "name": "BMS Cell 6 Voltage",
+    "unique_id": "bms_cell_6_voltage_ats_thiaged",
+    "state_topic": "casa/bms/cell_6_voltage",
+    "unit_of_measurement": "V",
+    "device_class": "voltage",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_cell_7_voltage/config
+{
+    "name": "BMS Cell 7 Voltage",
+    "unique_id": "bms_cell_7_voltage_ats_thiaged",
+    "state_topic": "casa/bms/cell_7_voltage",
+    "unit_of_measurement": "V",
+    "device_class": "voltage",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_cell_8_voltage/config
+{
+    "name": "BMS Cell 8 Voltage",
+    "unique_id": "bms_cell_8_voltage_ats_thiaged",
+    "state_topic": "casa/bms/cell_8_voltage",
+    "unit_of_measurement": "V",
+    "device_class": "voltage",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Additional cells 9-24 follow the same pattern...
+# For brevity, I'll show the pattern for cells 9-12:
+
+homeassistant/sensor/bms_cell_9_voltage/config
+{
+    "name": "BMS Cell 9 Voltage",
+    "unique_id": "bms_cell_9_voltage_ats_thiaged",
+    "state_topic": "casa/bms/cell_9_voltage",
+    "unit_of_measurement": "V",
+    "device_class": "voltage",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_cell_10_voltage/config
+{
+    "name": "BMS Cell 10 Voltage",
+    "unique_id": "bms_cell_10_voltage_ats_thiaged",
+    "state_topic": "casa/bms/cell_10_voltage",
+    "unit_of_measurement": "V",
+    "device_class": "voltage",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_cell_11_voltage/config
+{
+    "name": "BMS Cell 11 Voltage",
+    "unique_id": "bms_cell_11_voltage_ats_thiaged",
+    "state_topic": "casa/bms/cell_11_voltage",
+    "unit_of_measurement": "V",
+    "device_class": "voltage",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+homeassistant/sensor/bms_cell_12_voltage/config
+{
+    "name": "BMS Cell 12 Voltage",
+    "unique_id": "bms_cell_12_voltage_ats_thiaged",
+    "state_topic": "casa/bms/cell_12_voltage",
+    "unit_of_measurement": "V",
+    "device_class": "voltage",
+    "icon": "mdi:battery",
+    "device": {
+        "identifiers": [
+            "ats-thiaged"
+        ],
+        "name": "ATS Thiaged",
+        "model": "ATS",
+        "manufacturer": "thiaged"
+    }
+}
+
+# Note: Continue this pattern for cells 13-24 by changing the cell number
+# in both the sensor name, unique_id, and state_topic

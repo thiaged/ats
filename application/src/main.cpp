@@ -7,7 +7,7 @@
 #include <adapter/output/ScreenManager.h>
 #include <adapter/output/ScreenHome.h>
 #include <adapter/output/ScreenWave.h>
-#include <adapter/output/ScreenClock.h>
+#include <adapter/output/ScreenBMS.h>
 #include <core/domain/SolarSource.h>
 #include <core/domain/UtilitySource.h>
 #include <memory>
@@ -78,7 +78,7 @@ ScreenHome screenHome = ScreenHome(utilitySource, solarSource, &activeSource, &d
     drawManager, display, amoled, &userSourceLocked, configPreferences);
 ScreenWave screenWave = ScreenWave(utilitySource, solarSource, &activeSource, &definedSource, &userDefinedSource, battery,
     drawManager, display, amoled, cyclesToCapture, samplesPerCycle, &userSourceLocked, configPreferences);
-ScreenClock screenClock = ScreenClock(utilitySource, solarSource, &activeSource, &definedSource, &userDefinedSource, battery,
+ScreenBMS screenBMS = ScreenBMS(utilitySource, solarSource, &activeSource, &definedSource, &userDefinedSource, battery,
     drawManager, display, amoled, &userSourceLocked, configPreferences);
 ScreenUpdate screenUpdate = ScreenUpdate(utilitySource, solarSource, &activeSource, &definedSource, &userDefinedSource, battery,
     drawManager, display, amoled, &userSourceLocked, configPreferences);
@@ -179,7 +179,7 @@ void setup() {
     // Adiciona telas
     screenManager.AddScreen(std::unique_ptr<ScreenHome>(&screenHome)); //add tela home como primeira tela
     screenManager.AddScreen(std::unique_ptr<ScreenWave>(&screenWave));
-    screenManager.AddScreen(std::unique_ptr<ScreenClock>(&screenClock));
+    screenManager.AddScreen(std::unique_ptr<ScreenBMS>(&screenBMS));
     screenManager.AddScreen(std::unique_ptr<ScreenUpdate>(&screenUpdate));
 
     buzzerManager.PlayInitSound();
@@ -260,6 +260,13 @@ void loop() {
         digitalWrite(UTILITY_OFF_LED_PIN, LOW);
     }
 
+    // Ensure noBreak task stays alive
+    transferManager.EnsureNoBreakTaskRunning();
+    if (!transferManager.IsNoBreakTaskHealthy()) {
+        Serial.println("Warning: noBreak task heartbeat missing");
+        buzzerManager.PlayErrorSound();
+    }
+
     screenManager.Render();
 
     // Auto-calibration for better AC tension stability
@@ -277,17 +284,17 @@ void loop() {
         Serial.println("BMS voltage: " + String(battery.GetBms().totalVoltage));
         debounceNotify = millis();
         String bmsStatus = battery.GetBmsComunicationOn() ? "active" : "inactive";
-        
+
         // Debug output for AC tension stability monitoring
         Serial.println("=== AC Tension Stability Debug ===");
-        Serial.println("Utility - Voltage: " + String(utilitySource.GetTension(), 2) + 
-                      "V, ADC: " + String(utilitySource.GetSensorValue()) + 
+        Serial.println("Utility - Voltage: " + String(utilitySource.GetTension(), 2) +
+                      "V, ADC: " + String(utilitySource.GetSensorValue()) +
                       ", Calibrated: " + (utilitySource.IsCalibrated() ? "Yes" : "No"));
-        Serial.println("Solar - Voltage: " + String(solarSource.GetTension(), 2) + 
-                      "V, ADC: " + String(solarSource.GetSensorValue()) + 
+        Serial.println("Solar - Voltage: " + String(solarSource.GetTension(), 2) +
+                      "V, ADC: " + String(solarSource.GetSensorValue()) +
                       ", Calibrated: " + (solarSource.IsCalibrated() ? "Yes" : "No"));
         Serial.println("==================================");
-        
+
         if (serverManager.HasWsClients())
         {
             debounceNotify = millis();
@@ -302,6 +309,15 @@ void loop() {
                           "\", \"solarBottomAdcValue\": \"" + String(solarSource.GetBottomAdcValue()) +
                           "\", \"utilityTopAdcValue\": \"" + String(utilitySource.GetTopAdcValue()) +
                           "\", \"utilityBottomAdcValue\": \"" + String(utilitySource.GetBottomAdcValue()) +
+                          "\", \"bmsTotalVoltage\": \"" + String(battery.GetBmsTotalVoltage(), 2) +
+                          "\", \"bmsCurrent\": \"" + String(battery.GetBmsCurrent(), 2) +
+                          "\", \"bmsPower\": \"" + String(battery.GetBmsPower(), 2) +
+                          "\", \"bmsSoc\": \"" + String(battery.GetBmsSoc()) +
+                          "\", \"bmsCellCount\": \"" + String(battery.GetBmsTotalStrings()) +
+                          "\", \"bmsMosTemp\": \"" + String(battery.GetBmsMosTemp(), 1) +
+                          "\", \"bmsBalanceT1\": \"" + String(battery.GetBmsBatteryT1(), 1) +
+                          "\", \"bmsBatteryT2\": \"" + String(battery.GetBmsBatteryT2(), 1) +
+                          "\", \"bmsConnected\": \"" + (battery.GetBmsConnected() ? "true" : "false") +
                           "\"}";
 
             serverManager.NotifyClients(data);
@@ -325,6 +341,31 @@ void loop() {
         serverManager.SendToMqtt("casa/battery_voltage_utility/status", String(battery.GetBatteryConfigMin()).c_str());
         serverManager.SendToMqtt("casa/battery_percentage_solar/status", String(battery.GetBatteryConfigMaxPercentage()).c_str());
         serverManager.SendToMqtt("casa/battery_percentage_utility/status", String(battery.GetBatteryConfigMinPercentage()).c_str());
+
+        // JK BMS MQTT Data
+        if (battery.GetBmsConnected())
+        {
+            serverManager.SendToMqtt("casa/bms/total_voltage", String(battery.GetBmsTotalVoltage(), 2).c_str());
+            serverManager.SendToMqtt("casa/bms/current", String(battery.GetBmsCurrent(), 2).c_str());
+            serverManager.SendToMqtt("casa/bms/power", String(battery.GetBmsPower(), 2).c_str());
+            serverManager.SendToMqtt("casa/bms/soc", String(battery.GetBmsSoc()).c_str());
+            serverManager.SendToMqtt("casa/bms/total_strings", String(battery.GetBmsTotalStrings()).c_str());
+            serverManager.SendToMqtt("casa/bms/mos_temp", String(battery.GetBmsMosTemp(), 1).c_str());
+            serverManager.SendToMqtt("casa/bms/balance_t1", String(battery.GetBmsBatteryT1(), 1).c_str());
+            serverManager.SendToMqtt("casa/bms/battery_t2", String(battery.GetBmsBatteryT2(), 1).c_str());
+            serverManager.SendToMqtt("casa/bms/balance_current", String(battery.GetBmsBalanceCurrent(), 2).c_str());
+            serverManager.SendToMqtt("casa/bms/connected", battery.GetBmsConnected() ? "true" : "false");
+
+            // Individual cell voltages (up to 24 cells)
+            for (int i = 1; i <= battery.GetBmsTotalStrings() && i < 24; i++) {
+                float cellVoltage = battery.GetBmsCellVoltage(i);
+                if (cellVoltage > 0) { // Only publish if cell has voltage
+                    serverManager.SendToMqtt(("casa/bms/cell_" + String(i) + "_voltage").c_str(), String(cellVoltage, 3).c_str());
+                }
+            }
+        } else {
+            serverManager.SendToMqtt("casa/bms/connected", battery.GetBmsConnected() ? "true" : "false");
+        }
 
         if ((millis() - inactivityTime) > 300000)
         {

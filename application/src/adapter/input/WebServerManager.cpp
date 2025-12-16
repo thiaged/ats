@@ -1,6 +1,7 @@
 #include "WebServerManager.h"
 #include <ArduinoJson.h>
 #include <driver/rtc_io.h>
+#include <WiFi.h>
 
 String WebserverManager::setMenuEnabled(String html, MenuList menu)
 {
@@ -201,22 +202,50 @@ bool WebserverManager::HasWsClients()
 
 void WebserverManager::SendToMqtt(const char *topic, const char *message)
 {
+    // Do not attempt a blocking reconnect here. If disconnected, log and drop message.
     if (!mqttClient.connected())
     {
-        mqttClient.connect(MQTT_ID, MQTT_USER, MQTT_PASSWORD);
-        if (!mqttClient.connected())
-        {
-            Serial.println("Falha ao conectar ao MQTT");
-            return;
-        }
-        subscribeAllMqttTopics();
+        Serial.println("MQTT não conectado - mensagem não enviada");
+        return;
     }
     mqttClient.publish(topic, message, true);
 }
 
 void WebserverManager::LoopMqtt()
 {
+    // Service mqtt client
     mqttClient.loop();
+
+    // If disconnected and WiFi is available, try reconnecting occasionally
+    if (!mqttClient.connected())
+    {
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            attemptMqttReconnect();
+        }
+    }
+}
+
+void WebserverManager::attemptMqttReconnect()
+{
+    unsigned long now = millis();
+    if (now - lastMqttReconnectAttempt < mqttReconnectIntervalMs)
+    {
+        return; // respect interval
+    }
+
+    lastMqttReconnectAttempt = now;
+
+    Serial.println("Tentando reconectar ao MQTT...");
+    if (mqttClient.connect(MQTT_ID, MQTT_USER, MQTT_PASSWORD))
+    {
+        Serial.println("Reconectado ao MQTT");
+        subscribeAllMqttTopics();
+    }
+    else
+    {
+        Serial.println("Falha ao reconectar ao MQTT");
+    }
 }
 
 void WebserverManager::SetWaitForSync(bool wait)
@@ -253,6 +282,9 @@ WebserverManager::WebserverManager(
     userDefinedSource = pUserDefinedSource;
     userSourceLocked = pUserSourceLocked;
     updatingFirmware = pUpdatingFirmware;
+    // init mqtt reconnect helpers
+    lastMqttReconnectAttempt = 0;
+    mqttReconnectIntervalMs = 5000; // try every 5s
 }
 
 void WebserverManager::Init()

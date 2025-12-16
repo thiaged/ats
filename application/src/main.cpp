@@ -164,6 +164,8 @@ void setup() {
             delay(500);
         }
 
+        WiFi.setAutoReconnect(true);
+
         // if you get here you have connected to the WiFi
         Serial.println("connected to wifi :)");
         // Initialize and configure NTP

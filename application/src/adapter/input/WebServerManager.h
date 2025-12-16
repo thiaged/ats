@@ -643,6 +643,10 @@ private:
 
     WiFiClient client;
     PubSubClient mqttClient;
+    // MQTT reconnection helpers
+    unsigned long lastMqttReconnectAttempt;
+    unsigned long mqttReconnectIntervalMs;
+
 
     String setMenuEnabled(String html, MenuList menu);
 
@@ -652,6 +656,8 @@ private:
     void onMqttMessage(char *topic, byte *payload, unsigned int length);
 
     void subscribeAllMqttTopics();
+    // Try to reconnect to MQTT if needed (non-blocking, respects interval)
+    void attemptMqttReconnect();
 
 public:
     WebserverManager(

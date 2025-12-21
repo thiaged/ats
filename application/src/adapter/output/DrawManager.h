@@ -35,5 +35,6 @@ public:
     void RequestDraw(int x, int y, int w, int h, TFT_eSprite *sprite, EnergySource *utilitySource, EnergySource *solarSource);
     int GetScreenWidth();
     int GetScreenHeight();
+    void SetSleepMode(bool sleep);
 
 };

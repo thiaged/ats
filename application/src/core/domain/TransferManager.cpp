@@ -14,13 +14,14 @@ TransferManager::TransferManager(
     ScreenWave &pScreenWave,
     BuzzerManager &pBuzzerManager,
     BatterySource &pBattery,
+    Logger &pLogger,
     bool *pUserSourceLocked,
     bool *pUpdatingFirmware,
     unsigned long *pInactivityTime,
     bool &pWaitForSync
 )
     : energyInput(pEnergyInput), screenManager(pScreenManager), screenWave(pScreenWave), buzzerManager(pBuzzerManager),
-        battery(pBattery), waitForSync(pWaitForSync)
+        battery(pBattery), logger(pLogger), waitForSync(pWaitForSync)
 {
     activeSource = pActiveSource;
     definedSource = pDefinedSource;
@@ -48,7 +49,7 @@ void TransferManager::TransferToDefined(bool pTransferSincronized, bool pSyncWat
         return;
     }
 
-    Serial.println("Transfering to " + (*definedSource)->GetTypePrintable());
+    logger.logInfoF("Transfering to %s", (*definedSource)->GetTypePrintable());
     transfering = true;
 
     if ((*activeSource)->GetType() == (*definedSource)->GetType())
@@ -59,7 +60,7 @@ void TransferManager::TransferToDefined(bool pTransferSincronized, bool pSyncWat
 
     if (!(*definedSource)->IsOnline() && (*activeSource)->IsOnline())
     {
-        Serial.println("Source " + String((*definedSource)->GetType()) + " off line, aborting jump");
+        logger.logWarningF("Source %s off line, aborting jump", (*definedSource)->GetTypePrintable());
         transfering = false;
         definedSource = activeSource;
         return;
@@ -67,7 +68,7 @@ void TransferManager::TransferToDefined(bool pTransferSincronized, bool pSyncWat
 
     if (pSyncWatchTransfer == false && (millis() - lastTransfered) < (unsigned long)delayTransferProtect)
     {
-        Serial.println("Fast jump protect");
+        logger.logWarning("Fast jump protect");
         transfering = false;
         return;
     }
@@ -90,7 +91,7 @@ void TransferManager::TransferToDefined(bool pTransferSincronized, bool pSyncWat
         digitalWrite(UTILITY_OFF_LED_PIN, LOW);
         break;
     default:
-        Serial.println("inválid source type");
+        logger.logError("invalid source type");
         break;
     }
 
@@ -105,27 +106,27 @@ void TransferManager::startSyncWatchTask()
     if (syncWatchTaskHandle == NULL)
     {
         xTaskCreatePinnedToCore(
-            syncWatchTask, "SyncWatchTask", 2048, this, 2, &syncWatchTaskHandle, 0);
+            syncWatchTask, "SyncWatchTask", 8192, this, 2, &syncWatchTaskHandle, 0);
     }
 }
 
 void TransferManager::funcSyncWatchTask(void *pvParameters)
 {
-    Serial.println("syncwatch task iniciada");
+    logger.logInfo("syncwatch task iniciada");
     unsigned long syncStart = millis();
     *inactivityTime = millis();
 
     while (true && !(*updatingFirmware))
     {
         if (!(*definedSource)->IsOnline()) {
-            Serial.println("defined source became offline");
+            logger.logWarning("defined source became offline");
             *definedSource = *activeSource;
             transfering = false;
             break;
         }
 
         if (! waitForSync) {
-            Serial.println("waitForSync is disabled");
+            logger.logInfo("waitForSync is disabled");
             TransferToDefined(false, true);
             screenManager.PreviousScreen();
             break;
@@ -133,7 +134,7 @@ void TransferManager::funcSyncWatchTask(void *pvParameters)
 
         if (screenWave.IsSyncronized())
         {
-            Serial.println("sine wave is synced.");
+            logger.logInfo("sine wave is synced.");
 
             TransferToDefined(false, true);
             screenManager.PreviousScreen();
@@ -142,7 +143,7 @@ void TransferManager::funcSyncWatchTask(void *pvParameters)
 
         if ((millis() - syncStart) > 180000UL)
         {
-            Serial.println("Long time waiting sync.");
+            logger.logWarning("Long time waiting sync.");
 
             TransferToDefined(false, true);
             screenManager.PreviousScreen();
@@ -201,20 +202,20 @@ bool TransferManager::IsNoBreakTaskHealthy() const
 
 void TransferManager::funcNoBreakTask(void *pvParameters)
 {
-    Serial.println("nobreak task iniciada");
+    logger.logInfo("nobreak task iniciada");
     while (true)
     {
         noBreakLastHeartbeat = millis();
         if (transfering == true || *updatingFirmware == true)
         {
-            // Serial.println("transfering");
+            logger.logWarning("update while transferring");
             vTaskDelay(10 / portTICK_PERIOD_MS);
             continue;
         }
 
         if (!energyInput.GetSolarSource()->IsOnline() || !energyInput.GetUtilitySource()->IsOnline() && !screenWave.IsSyncronized())
         {
-            // Serial.println("synced by source off");
+            logger.logInfo("synced status by source off");
             screenWave.SetSyncronized(true);
         }
 
@@ -225,7 +226,7 @@ void TransferManager::funcNoBreakTask(void *pvParameters)
             energyInput.GetSolarSource()->IsOnline() == true)
         {
             // jump to solar
-            Serial.println("utility ficou off, pula pra solar");
+            logger.logWarning("utility down, jump to solar");
             *definedSource = energyInput.GetSolarSource();
             TransferToDefined(false);
             continue;
@@ -238,7 +239,7 @@ void TransferManager::funcNoBreakTask(void *pvParameters)
             energyInput.GetUtilitySource()->IsOnline() == true)
         {
             // jump to utility
-            Serial.println("solar ficou off, pula pra utility");
+            logger.logWarning("solar down, jump to utility");
             *definedSource = energyInput.GetUtilitySource();
             TransferToDefined(false);
             continue;

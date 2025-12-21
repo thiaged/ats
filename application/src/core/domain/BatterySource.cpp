@@ -4,11 +4,13 @@ BatterySource::BatterySource(
     DynamicAnalogBuffer &pBatteryReadBuffer,
     Preferences &pConfigPreferences,
     HardwareSerial &pSerial,
+    Logger &pLogger,
     bool *pUpdatingFirmware
 )
     : batteryReadBuffer(pBatteryReadBuffer),
       configPreferences(pConfigPreferences),
       RS485Serial(pSerial),
+      logger(pLogger),
       updatingFirmware(pUpdatingFirmware)
 {
     bufferIndex = 0;
@@ -91,23 +93,31 @@ void BatterySource::parseCellVoltages(const byte* data, int length, int offset)
 
     // Verificação de segurança: garantir que há espaço para o comprimento
     if (offset + 1 >= length) {
-        Serial.println("⚠️ Buffer insuficiente para ler comprimento das células");
+        dataSizes[REG_CELL_VOLTAGES] = 0;
+        logger.logWarning("⚠️ Buffer insuficiente para ler comprimento das células");
         return;
     }
 
     // ⭐ LER O BYTE DE COMPRIMENTO CORRETAMENTE ⭐
-    uint8_t dataLength = data[offset]; // offset+1 porque offset aponta para o ID (0x79)
+    uint8_t dataLength = data[offset]; // offset já chega 1 a frente do ID (0x79)
     dataSizes[REG_CELL_VOLTAGES] = dataLength; // Armazenar para avançar no parsing principal
+
+    if (dataLength == 0 || dataLength > 72 || dataLength % 3 != 0) {
+        dataSizes[REG_CELL_VOLTAGES] = 0;
+        logger.logWarningF("⚠️ Comprimento inválido no registrador 0x79: %d", dataLength);
+        return;
+    }
 
     // Verificar se há dados suficientes
     if (offset + 1 + dataLength > length) { // +2: ID + comprimento
-        Serial.printf("⚠️ Dados insuficientes para células: precisa %d, tem %d\n",
-                     offset + 2 + dataLength, length);
+        dataSizes[REG_CELL_VOLTAGES] = 0;
+        logger.logWarningF("⚠️ Dados insuficientes para células: precisa %d, tem %d\n",
+                         offset + 2 + dataLength, length);
         return;
     }
 
     int numCells = dataLength / 3; // Cada célula usa 3 bytes
-    // Serial.printf("🔋 Processando %d células (comprimento=%d)\n", numCells, dataLength);
+    logger.logInfoF("🔋 Processando %d células (comprimento=%d)\n", numCells, dataLength);
 
     // ⭐ POSIÇÃO CORRETA PARA INÍCIO DOS DADOS ⭐
     int j = offset + 1; // Após byte de comprimento
@@ -116,8 +126,8 @@ void BatterySource::parseCellVoltages(const byte* data, int length, int offset)
         byte cellId = data[j];       // ID da célula
         uint16_t rawVoltage = (data[j + 1] << 8) | data[j + 2]; // Tensão em mV
 
-        // Serial.printf("  Célula %d: ID=%d, tensão=%d mV\n",
-        //              cellIndex, cellId, rawVoltage);
+        logger.logInfoF("  Célula %d: ID=%d, tensão=%d mV\n",
+                         cellIndex, cellId, rawVoltage);
 
         // Validação do ID da célula (1-24)
         if (cellId >= 1 && cellId <= 24) {
@@ -139,22 +149,16 @@ void BatterySource::parseCellVoltages(const byte* data, int length, int offset)
                     BMS.lowestCellIndex = cellId;
                 }
             } else {
-                Serial.printf("  ⚠️ Tensão inválida na célula %d: %.3f V\n",
+                logger.logWarningF("  ⚠️ Tensão inválida na célula %d: %.3f V\n",
                              cellId, voltage);
             }
         } else {
-            Serial.printf("  ⚠️ ID de célula inválido: %d\n", cellId);
+            logger.logWarningF("  ⚠️ ID de célula inválido: %d\n", cellId);
         }
 
         j += 3; // Avançar para próxima célula (3 bytes por célula)
     }
 
-    // Debug dos resultados
-    // if (BMS.highestCellIndex != -1 && BMS.lowestCellIndex != -1) {
-    //     Serial.printf("📊 Célula mais alta: #%d (%.3f V), Célula mais baixa: #%d (%.3f V)\n",
-    //                  BMS.highestCellIndex, highestCellVoltage,
-    //                  BMS.lowestCellIndex, lowestCellVoltage);
-    // }
 }
 
 void BatterySource::parseTemperature(const byte* data, int length, int offset, float& target)
@@ -187,12 +191,20 @@ void BatterySource::parseBatteryT2(const byte* data, int length, int offset)
     parseTemperature(data, length, offset, BMS.batteryT2);
 }
 
-void BatterySource::parseTotalVoltage(const byte* data, int length, int offset)
+void BatterySource::parseTotalVoltage(const byte *data, int length, int offset)
 {
-    if (offset + dataSizes[REG_TOTAL_VOLTAGE] < length) {
+    if (offset + dataSizes[REG_TOTAL_VOLTAGE] < length)
+    {
         uint16_t rawValue = (data[offset] << 8) | data[offset + 1];
         double voltage = rawValue / 100.0;
-        if((int)voltage != 468 && voltage > batteryVoltageMin && voltage < batteryVoltageMax) BMS.totalVoltage = voltage;
+        if (
+            voltage > batteryVoltageMin &&
+            voltage < batteryVoltageMax)
+        {
+            BMS.totalVoltage = voltage;
+        } else {
+            logger.logWarningF("⚠️ Tensão total inválida: %.2f V", voltage);
+        }
     }
 }
 
@@ -230,10 +242,11 @@ void BatterySource::parseTotalStrings(const byte* data, int length, int offset)
 {
     if (offset + dataSizes[REG_TOTAL_STRINGS] < length) {
         uint16_t numCells = (data[offset] << 8) | data[offset + 1];
-        Serial.printf("🔋 Número de células detectadas: %d\n", numCells);
+        logger.logInfoF("🔋 Número de células detectadas: %d\n", numCells);
+
         if(numCells <= 24) BMS.totalStrings = numCells;
     } else {
-        Serial.println("⚠️ Dados insuficientes para ler número de células");
+        logger.logWarning("⚠️ Dados insuficientes para ler número de células");
     }
 }
 
@@ -314,8 +327,7 @@ void BatterySource::parseWarnMessages(const byte* data, int length, int offset)
         if (protection309B) warnings += "309B_Protection ";
 
         if (warnings.length() > 0) {
-            Serial.print("⚠️ BMS Warnings: ");
-            Serial.println(warnings);
+            logger.logWarningF("⚠️ BMS Warnings: %s", warnings.c_str());
         }
 
         // Define se há algum alarme ativo
@@ -334,12 +346,12 @@ void BatterySource::Init()
     RS485Serial.begin(RS485_BAUD, SERIAL_8N1, RS485_RX, RS485_TX);
     RS485Serial.setTimeout(400);
 
-    Serial.println("JK BMS Communication started");
+    logger.logInfo("JK BMS Communication started");
 
     startSensorReadTask();
 
     configPreferences.begin("config", true);
-    batteryConfig.batteryCalibrationValue = configPreferences.getFloat("battery-calib", batteryConfig.batteryCalibrationValue);
+    batteryConfig = configPreferences.getFloat("battery-calib", batteryConfig);
     bmsComunicationOn = configPreferences.getBool("bms-on", false);
     batteryConfigMin = configPreferences.getDouble("bMin", 23.50);
     batteryConfigMax = configPreferences.getDouble("bMax", 27.00);
@@ -350,7 +362,7 @@ void BatterySource::Init()
     // Cria a fila (pode armazenar 1 buffer por vez)
     bmsResponseQueue = xQueueCreate(1, sizeof(BmsResponseItem));
     if (bmsResponseQueue == NULL) {
-        Serial.println("Falha ao criar fila BMS");
+        logger.logError("Falha ao criar fila BMS");
     }
 
     // Inicia a task de parsing
@@ -417,7 +429,7 @@ void BatterySource::readBatteryResistorDivisor()
         adcValue = 0;
 
     batteryReadBuffer.AddReading(adcValue);
-    batteryVoltage = (batteryReadBuffer.GetMean() / 4096.0 * 3.33) * ((BATTERY_SENSOR_R1 + BATTERY_SENSOR_R2) / BATTERY_SENSOR_R2) * batteryConfig.batteryCalibrationValue;
+    batteryVoltage = (batteryReadBuffer.GetMean() / 4096.0 * 3.33) * ((BATTERY_SENSOR_R1 + BATTERY_SENSOR_R2) / BATTERY_SENSOR_R2) * batteryConfig;
 }
 
 bool BatterySource::validateResponseCRC(byte* buffer, int length)
@@ -428,7 +440,7 @@ bool BatterySource::validateResponseCRC(byte* buffer, int length)
     int footerPos = -1;
     // Precisamos de pelo menos 5 bytes: footer + 4 bytes de CRC conforme o protocolo usado anteriormente
     if (length < 5) {
-        Serial.println("Response too short to contain footer + CRC");
+        logger.logError("Response too short to contain footer + CRC");
         BMS.consecutiveCrcFailures++;
         return false;
     }
@@ -442,7 +454,7 @@ bool BatterySource::validateResponseCRC(byte* buffer, int length)
     }
 
     if (footerPos == -1) {
-        Serial.println("Footer 0x68 not found in response");
+        logger.logError("Footer 0x68 not found in response");
         BMS.consecutiveCrcFailures++;
         return false;
     }
@@ -450,7 +462,7 @@ bool BatterySource::validateResponseCRC(byte* buffer, int length)
     // Verificar se há espaço para 4 bytes de CRC após o footer
     // footerPos + 4 deve ser um índice válido (0-based)
     if (footerPos + 4 >= length + 2) {
-        Serial.println("Not enough space for CRC after footer");
+        logger.logError("Not enough space for CRC after footer");
         BMS.consecutiveCrcFailures++;
         return false;
     }
@@ -479,25 +491,20 @@ bool BatterySource::validateResponseCRC(byte* buffer, int length)
     // (voltagens de células, temperatura, corrente, SOC, etc. são todos válidos)
 
     if (calculatedCRC == receivedCRC) {
-        Serial.println("✓ CRC OK");
+        logger.logInfo("✓ CRC OK");
         BMS.consecutiveCrcFailures = 0;
         return true;
     } else {
         // CRC não corresponde, mas permitir processamento com limite de tolerância
-        Serial.print("⚠ CRC MISMATCH (data will be processed): calculated=0x");
-        Serial.print(calculatedCRC, HEX);
-        Serial.print(", received=0x");
-        Serial.print(receivedCRC, HEX);
-        Serial.print(" | Failures: ");
-        Serial.print(BMS.consecutiveCrcFailures + 1);
-        Serial.println("/5");
+        logger.logWarningF("⚠ CRC MISMATCH (data will be processed): calculated=0x%X, received=0x%X", calculatedCRC, receivedCRC);
+        logger.logWarningF("Failure count: %d/5", BMS.consecutiveCrcFailures + 1);
 
         BMS.consecutiveCrcFailures++;
 
         // Desconectar apenas após múltiplas falhas consecutivas de CRC
         // Isso permite tolerância para variações de firmware ou protocolo
         if (BMS.consecutiveCrcFailures >= 5) {
-            Serial.println("❌ BMS desconectado após 5 falhas consecutivas de CRC");
+            logger.logError("❌ BMS desconectado após 5 falhas consecutivas de CRC");
             return false;
         }
 
@@ -527,11 +534,7 @@ void BatterySource::readBatteryBMS()
     command[19] = 0x01;
     command[20] = crc8;
 
-    Serial.print("Sending Read All Data command: ");
-    for (int i = 0; i < JK_BMS_FULL_CMD_LENGTH; i++) {
-        Serial.printf("%02X ", command[i]);
-    }
-    Serial.println();
+    logBufferDump("Read All Data Command", command, JK_BMS_FULL_CMD_LENGTH);
 
     RS485Serial.write(command, JK_BMS_FULL_CMD_LENGTH);
     RS485Serial.flush();
@@ -553,16 +556,16 @@ void BatterySource::readBatteryBMS()
 
             // Envia para a fila (sem bloquear)
             if (xQueueSend(bmsResponseQueue, &item, 0) != pdPASS) {
-                Serial.println("Fila cheia — descartando resposta antiga");
+                logger.logWarning("Fila cheia — descartando resposta antiga");
             } else {
-                Serial.println("Resposta da BMS enfileirada para parsing assíncrono");
+                logger.logInfo("Resposta da BMS enfileirada para parsing assíncrono");
             }
         } else {
-            Serial.println("No data read after Read All Data command.");
+            logger.logWarning("No data read after Read All Data command.");
             BMS.isConnected = false;
         }
     } else {
-        Serial.println("No response available after Read All Data command.");
+        logger.logWarning("No response available after Read All Data command.");
         BMS.isConnected = false;
     }
 
@@ -583,14 +586,14 @@ void BatterySource::checkConnectionTimeout()
     if (BMS.isConnected && (millis() - BMS.lastResponseTime > 5000))
     {
         BMS.isConnected = false;
-        Serial.println("BMS connection timeout");
+        logger.logWarning("BMS connection timeout");
     }
 
     if (bmsComunicationFailures >= 5)
     {
         bmsComunicationOn = false;
         BMS.isConnected = false;
-        Serial.println("BMS disconnected after 5 consecutive communication failures");
+        logger.logWarning("BMS disconnected after 5 consecutive communication failures");
     }
 }
 
@@ -605,13 +608,13 @@ void BatterySource::processAllData(byte* buffer, int length)
     }
 
     if (headerPos == -1) {
-        Serial.println("JK BMS header not found");
+        logger.logWarning("JK BMS header not found");
         BMS.isConnected = false;
         return;
     }
 
     if (headerPos + 2 >= length) {
-        Serial.println("Pacote muito curto após header");
+        logger.logWarning("Pacote muito curto após header");
         BMS.isConnected = false;
         return;
     }
@@ -621,17 +624,17 @@ void BatterySource::processAllData(byte* buffer, int length)
     int expectedTotalLength = headerPos + packetLength;
 
     if (expectedTotalLength > length) {
-        Serial.println("Pacote incompleto - esperado: " + String(expectedTotalLength) + ", recebido: " + String(length));
+        logger.logWarningF("Pacote incompleto - esperado: %d, recebido: %d", expectedTotalLength, length);
         BMS.isConnected = false;
         return;
     }
 
     // --- VALIDAR CRC ---
     if (!validateResponseCRC(buffer + headerPos, length - headerPos)) {
-        Serial.println("CRC validation failed - discarding response");
+        logger.logWarning("CRC validation failed - discarding response");
         if (BMS.consecutiveCrcFailures >= 5) {
             BMS.isConnected = false;
-            Serial.println("BMS disconnected after 5 consecutive CRC failures");
+            logger.logError("BMS disconnected after 5 consecutive CRC failures");
         }
         return;
     }
@@ -831,11 +834,11 @@ void BatterySource::bmsParserTask(void *pvParameters)
 void BatterySource::processBmsResponseAsync(byte* buffer, int length)
 {
     if (buffer[0] != 0x4E || buffer[1] != 0x57) {
-        Serial.println("❌ Pacote inválido: header não encontrado no início");
+        logger.logError("❌ Pacote inválido: header não encontrado no início");
         BMS.consecutiveErrors++;
         if (BMS.consecutiveErrors >= 5) {
             bmsComunicationOn = false;
-            Serial.println("❌ BMS desconectado após 5 erros consecutivos de comprimento");
+            logger.logError("❌ BMS desconectado após 5 erros consecutivos de comprimento");
             BMS.consecutiveErrors = 0;
         }
         return;
@@ -843,12 +846,12 @@ void BatterySource::processBmsResponseAsync(byte* buffer, int length)
 
     uint16_t packetLength = (buffer[2] << 8) | buffer[3];
     if (packetLength != length) {
-        Serial.printf("⚠️ Comprimento declarado (%d) != recebido (%d)\n", packetLength, length);
+        logger.logWarningF("⚠️ Comprimento declarado (%d) != recebido (%d)\n", packetLength, length);
         if (abs(packetLength - length) > 8) {
             BMS.consecutiveErrors++;
             if (BMS.consecutiveErrors >= 5) {
                 bmsComunicationOn = false;
-                Serial.println("❌ BMS desconectado após 5 erros consecutivos de comprimento");
+                logger.logError("❌ BMS desconectado após 5 erros consecutivos de comprimento");
                 BMS.consecutiveErrors = 0;
             }
             return;
@@ -858,7 +861,7 @@ void BatterySource::processBmsResponseAsync(byte* buffer, int length)
     if (!validateResponseCRC(buffer, length)) {
         if (BMS.consecutiveCrcFailures >= 5) {
             bmsComunicationOn = false;
-            Serial.println("❌ BMS desconectado após 5 falhas consecutivas de CRC");
+            logger.logError("❌ BMS desconectado após 5 falhas consecutivas de CRC");
         }
         return;
     }
@@ -875,17 +878,13 @@ void BatterySource::processBmsResponseAsync(byte* buffer, int length)
         uint8_t dataLength = 1;
 
         if (pos + dataLength > length - 3) {
-            Serial.printf("⚠️ Dados insuficientes para registrador 0x%02X\n", registerId);
+            logger.logWarningF("⚠️ Dados insuficientes para registrador 0x%02X\n", registerId);
             BMS.consecutiveErrors++;
             if (BMS.consecutiveErrors >= 5) {
                 bmsComunicationOn = false;
-                Serial.println("❌ BMS desconectado após 5 erros consecutivos de dados insuficientes");
-                Serial.printf("Detalhe: pos=%d, dataLength=%d, length=%d\n", pos, dataLength, length);
-                Serial.println("Buffer dump:");
-                for (int i = 0; i < length; i++) {
-                    Serial.printf("%02X ", buffer[i]);
-                }
-                Serial.println();
+                logger.logError("❌ BMS desconectado após 5 erros consecutivos de dados inválidos");
+                logger.logWarningF("Detalhe: pos=%d, dataLength=%d, length=%d\n", pos, dataLength, length);
+                logBufferDump("⚠️ Buffer recebido", buffer, length);
                 BMS.consecutiveErrors = 0;
             }
             break;
@@ -893,12 +892,16 @@ void BatterySource::processBmsResponseAsync(byte* buffer, int length)
 
         if (registerId < JUMP_TABLE_SIZE && jumpTable[registerId] != nullptr && isValidAddress(registerId)) {
             (this->*jumpTable[registerId])(buffer, length, pos);
-            // Serial.printf("✅ Registrador 0x%02X processado com sucesso\n", registerId);
             dataLength = dataSizes[registerId]; // Atualiza dataLength conforme o parsing
             if (registerId == REG_WARN_MESSAGES) {
                 BMS.consecutiveErrors = 0; // Resetar erros após sucesso completo
                 break; // Sai após ler as mensagens de aviso
             }
+        }
+
+        if (dataLength == 0) {
+            logger.logWarningF("⚠️ Comprimento inválido para registrador 0x%02X\n", registerId);
+            break;
         }
 
         pos += dataLength;
@@ -907,4 +910,29 @@ void BatterySource::processBmsResponseAsync(byte* buffer, int length)
     BMS.lastResponseTime = millis();
     BMS.isConnected = bmsComunicationOn;
     Serial.println("✅ Parsing assíncrono da BMS concluído com sucesso");
+}
+
+void BatterySource::logBufferDump(const char* prefix, const uint8_t* data, size_t len)
+{
+    // Tamanho suficiente para ~64 bytes em hex + texto
+    constexpr size_t BUF_SIZE = 256;
+    char temp[BUF_SIZE];
+
+    int written = snprintf(temp, sizeof(temp), "%s: ", prefix);
+    if (written < 0 || written >= (int)sizeof(temp)) {
+        logger.logError("❌ Falha ao gerar cabeçalho do dump");
+        return;
+    }
+
+    char* ptr = temp + written;
+    size_t remaining = sizeof(temp) - written;
+
+    for (size_t i = 0; i < len && remaining > 3; i++) { // 3: "FF "
+        int n = snprintf(ptr, remaining, "%02X ", data[i]);
+        if (n < 0 || n >= (int)remaining) break;
+        ptr += n;
+        remaining -= n;
+    }
+
+    logger.logInfo(temp);
 }

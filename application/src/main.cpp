@@ -14,7 +14,9 @@
 #include <adapter/input/EnergyInput.h>
 #include <core/domain/TransferManager.h>
 #include <adapter/output/BuzzerManager.h>
-#include "adapter/input/WebServerManager.h"
+#include <adapter/input/WebServerManager.h>
+#include <adapter/output/MqttLogger.h>
+#include <adapter/output/SerialLogger.h>
 
 const int cyclesToCapture = 3;
 const int samplesPerCycle = 80;
@@ -57,14 +59,19 @@ TFT_eSprite *systemSprite = new TFT_eSprite(&display);
 // Connect to WiFi
 WiFiManager wm;
 
-Preferences configPreferences;
+Preferences configPreferences = Preferences();
 
 ScreenManager screenManager = ScreenManager();
 DynamicAnalogBuffer batteryBufferService = DynamicAnalogBuffer(20, dcOffsetBattery);
 DynamicAnalogBuffer solarBufferService = DynamicAnalogBuffer(totalSamples, dcOffsetSolar);
 DynamicAnalogBuffer utilityBufferService = DynamicAnalogBuffer(totalSamples, dcOffsetUtility);
 
-BatterySource battery = BatterySource(batteryBufferService, configPreferences, Serial2, &updatingFirmware);
+SerialLogger serialLogger = SerialLogger(LogLevel::INFO);
+
+MQTTManager mqttManager = MQTTManager(serialLogger);
+MQTTLogger mqttLogger = MQTTLogger(LogLevel::WARNING, mqttManager);
+
+BatterySource battery = BatterySource(batteryBufferService, configPreferences, Serial2, mqttLogger, &updatingFirmware);
 DrawManager drawManager = DrawManager(amoled, inSleepMode);
 UtilitySource utilitySource = UtilitySource(configPreferences, utilityBufferService, SourceType::UTILITY_SOURCE_TYPE, ZMPT_UTILITY_PIN);
 SolarSource solarSource = SolarSource(configPreferences, solarBufferService, SourceType::SOLAR_SOURCE_TYPE, ZMPT_SOLAR_PIN);
@@ -84,13 +91,13 @@ ScreenUpdate screenUpdate = ScreenUpdate(utilitySource, solarSource, &activeSour
     drawManager, display, amoled, &userSourceLocked, configPreferences);
 
 WebserverManager serverManager = WebserverManager(utilitySource, solarSource, battery, screenManager, screenUpdate, &userDefinedSource,
-    &userSourceLocked, &updatingFirmware, waitForSync, configPreferences, inactivityTime, firmwareUpdateUtilityOn);
+    mqttManager, mqttLogger, &userSourceLocked, &updatingFirmware, waitForSync, configPreferences, inactivityTime, firmwareUpdateUtilityOn);
 
 EnergyInput energyInput = EnergyInput(utilitySource, solarSource, screenWave, sampleInterval, &updatingFirmware);
 
 BuzzerManager buzzerManager = BuzzerManager(BUZZER_PIN);
 TransferManager transferManager = TransferManager(&activeSource, &definedSource, &userDefinedSource, energyInput, screenManager,
-    screenWave, buzzerManager, battery, &userSourceLocked, &updatingFirmware, &inactivityTime, waitForSync);
+    screenWave, buzzerManager, battery, mqttLogger, &userSourceLocked, &updatingFirmware, &inactivityTime, waitForSync);
 
 // NTP server settings
 const char *ntpServer = "pool.ntp.org";
@@ -138,6 +145,7 @@ void setup() {
     pinMode(21, INPUT_PULLUP);
 
     drawManager.StartDrawTask();
+    mqttManager.StartMqttTask();
     checkFailures();
 
     battery.Init();
@@ -176,6 +184,7 @@ void setup() {
         drawManager.RequestDraw(0, 0, WIDTH, HEIGHT, systemSprite, nullptr, nullptr);
 
         serverManager.Init();
+        mqttManager.Init();
     }
 
     // Adiciona telas
@@ -374,15 +383,17 @@ void loop() {
             if (amoled.getBrightness() > 0) {
                 amoled.setBrightness(0);
             }
+            drawManager.SetSleepMode(true);
 
         } else {
             if (amoled.getBrightness() == 0) {
                 amoled.setBrightness(AMOLED_DEFAULT_BRIGHTNESS);
             }
+            drawManager.SetSleepMode(false);
         }
     }
 
-    serverManager.LoopMqtt();
+    mqttManager.loop();
 
     delay(60);
 }
@@ -451,8 +462,7 @@ void checkFailures()
 
         while (wait)
         {
-
-            if ((millis() - elapsedTime) > 300000)
+            if ((millis() - elapsedTime) > 300000 && (millis() - elapsedTime) < 330000)
             {
                 ledcWrite(0, 153);  // Inicializa o buzzer com 50% de duty cycle
                 delay(300);
@@ -465,7 +475,5 @@ void checkFailures()
             wait = digitalRead(MENU_BUTTON_PIN) == HIGH;
             delay(200);
         }
-
     }
-
 }

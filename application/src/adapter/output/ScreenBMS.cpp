@@ -17,7 +17,6 @@ ScreenBMS::ScreenBMS(
         pAmoled, pUserSourceLocked, pConfigPreferences)
 {
     bmsSprite = new TFT_eSprite(&display);
-    // cellVoltagesSprite foi REMOVIDO
 }
 
 void ScreenBMS::Render()

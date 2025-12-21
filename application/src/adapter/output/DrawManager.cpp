@@ -31,6 +31,11 @@ int DrawManager::GetScreenHeight()
     return amoled.height();
 }
 
+void DrawManager::SetSleepMode(bool sleep)
+{
+    inSleepMode = sleep;
+}
+
 void DrawManager::funcDrawTask()
 {
     Serial.println("tarefa de desenho iniciada");
@@ -64,8 +69,8 @@ void DrawManager::drawTask(void *pvParameters)
 
 void DrawManager::StartDrawTask()
 {
-    // Cria a fila com capacidade para 60 comandos de desenho
-    drawQueue = xQueueCreate(60, sizeof(DrawCommand));
+    // Cria a fila com capacidade para 40 comandos de desenho
+    drawQueue = xQueueCreate(40, sizeof(DrawCommand));
     Serial.println("fila de desenho criada");
 
     // Inicia a tarefa de desenho

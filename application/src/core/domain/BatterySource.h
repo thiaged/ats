@@ -5,18 +5,11 @@
 #include "DynamicAnalogBuffer.h"
 #include <Preferences.h>
 #include "queue.h"
+#include <adapter/output/Logger.h>
 
 #define BATTERY_SENSOR_R1 100000.0
 #define BATTERY_SENSOR_R2 10000.0
 #define BATTERY_SENSOR_PIN 3
-
-struct BatteryConfig {
-    float batteryCalibrationValue;
-};
-
-const BatteryConfig defaultBatteryConfig = {
-    1.634
-};
 
 const int MAX_BUFFER_SIZE = 512;
 
@@ -95,7 +88,8 @@ class BatterySource
 private:
     Preferences &configPreferences;
     DynamicAnalogBuffer &batteryReadBuffer;
-    BatteryConfig batteryConfig = defaultBatteryConfig;
+    float batteryConfig = 1.634;
+    Logger &logger;
     double batteryConfigMin = 23.50;
     unsigned int batteryConfigMinPercentage = 40;
     unsigned int batteryConfigMaxPercentage = 60;
@@ -166,11 +160,14 @@ private:
     void processAllData(byte* buffer, int length);
     void processBmsResponseAsync(byte* buffer, int length);
 
+    void logBufferDump(const char* prefix, const uint8_t* data, size_t len);
+
 public:
     BatterySource(
         DynamicAnalogBuffer &pBatteryReadBuffer,
         Preferences &pConfigPreferences,
         HardwareSerial &pSerial,
+        Logger &pLogger,
         bool *pUpdatingFirmware
     );
     ~BatterySource();

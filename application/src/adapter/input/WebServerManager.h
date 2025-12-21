@@ -8,11 +8,10 @@
 #include <Update.h>
 #include <adapter/output/ScreenUpdate.h>
 #include <PubSubClient.h>
+#include <adapter/output/MqttManager.h>
+#include <adapter/output/Logger.h>
 
 #define RELAY_PIN 39
-#define MQTT_ID "ats-thiaged"
-#define MQTT_USER "mqtt_user"
-#define MQTT_PASSWORD "123@123"
 
 const char menu_html[] PROGMEM = R"rawliteral(
     <nav class="nav-menu">
@@ -641,12 +640,8 @@ private:
     AsyncWebSocket websocket;
     AsyncEventSource events;
 
-    WiFiClient client;
-    PubSubClient mqttClient;
-    // MQTT reconnection helpers
-    unsigned long lastMqttReconnectAttempt;
-    unsigned long mqttReconnectIntervalMs;
-
+    MQTTManager &mqttManager;
+    Logger &logger;
 
     String setMenuEnabled(String html, MenuList menu);
 
@@ -656,8 +651,6 @@ private:
     void onMqttMessage(char *topic, byte *payload, unsigned int length);
 
     void subscribeAllMqttTopics();
-    // Try to reconnect to MQTT if needed (non-blocking, respects interval)
-    void attemptMqttReconnect();
 
 public:
     WebserverManager(
@@ -667,6 +660,8 @@ public:
         ScreenManager &pScreenManager,
         ScreenUpdate &pScreenUpdate,
         EnergySource **pUserDefinedSource,
+        MQTTManager &pMqttManager,
+        Logger &pMqttLogger,
         bool *pUserSourceLocked,
         bool *pUpdatingFirmware,
         bool &pWaitForSync,
@@ -680,6 +675,5 @@ public:
     void NotifyClientsEvent(const char *message, const char *eventName);
     bool HasWsClients();
     void SendToMqtt(const char *topic, const char *message);
-    void LoopMqtt();
     void SetWaitForSync(bool wait);
 };

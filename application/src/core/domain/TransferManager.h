@@ -18,6 +18,7 @@ private:
     ScreenWave &screenWave;
     BuzzerManager &buzzerManager;
     BatterySource &battery;
+    Logger &logger;
     bool *userSourceLocked;
     bool *updatingFirmware;
     unsigned long *inactivityTime;
@@ -51,6 +52,7 @@ public:
         ScreenWave &screenWave,
         BuzzerManager &pBuzzerManager,
         BatterySource &pBattery,
+        Logger &pLogger,
         bool *pUserSourceLocked,
         bool *pUpdatingFirmware,
         unsigned long *pInactivityTime,

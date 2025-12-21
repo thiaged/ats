@@ -1,4 +1,4 @@
-#include "WebServerManager.h"
+#include <adapter/input/WebServerManager.h>
 #include <ArduinoJson.h>
 #include <driver/rtc_io.h>
 #include <WiFi.h>
@@ -40,19 +40,19 @@ void WebserverManager::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *c
 {
     if (type == WS_EVT_CONNECT)
     {
-        Serial.println("Cliente WebSocket conectado");
+        logger.logInfo("Cliente WebSocket conectado");
     }
     else if (type == WS_EVT_DATA)
     {
         String msg = String(reinterpret_cast<char *>(data), len);
-        Serial.println("Dados recebidos: " + msg);
+        logger.logInfoF("Dados recebidos: %s", msg.c_str());
     }
 }
 
 void WebserverManager::onMqttMessage(char *topic, byte *payload, unsigned int length)
 {
     String message = String((char *)payload).substring(0, length);
-    Serial.println("Mensagem recebida no tópico " + String(topic) + ": " + message);
+    logger.logInfoF("Mensagem recebida no tópico %s: %s", topic, message.c_str());
 
     if (String(topic) == "casa/bms/set")
     {
@@ -61,12 +61,12 @@ void WebserverManager::onMqttMessage(char *topic, byte *payload, unsigned int le
         if (message == "active")
         {
             battery.SetBmsComunicationOn(true);
-            Serial.println("BMS ativado");
+            logger.logInfo("BMS ativado");
         }
         else if (message == "inactive")
         {
             battery.SetBmsComunicationOn(false);
-            Serial.println("BMS desativado");
+            logger.logInfo("BMS desativado");
         }
     }
 
@@ -78,13 +78,13 @@ void WebserverManager::onMqttMessage(char *topic, byte *payload, unsigned int le
         {
             *userDefinedSource = &solarSource;
             *userSourceLocked = true;
-            Serial.println("User mudou para solar");
+            logger.logInfo("User mudou para solar");
         }
         else if (message == "utility")
         {
             *userDefinedSource = &utilitySource;
             *userSourceLocked = true;
-            Serial.println("User mudou para utility");
+            logger.logInfo("User mudou para utility");
         }
     }
 
@@ -96,7 +96,7 @@ void WebserverManager::onMqttMessage(char *topic, byte *payload, unsigned int le
         {
             *userSourceLocked = false;
             *userDefinedSource = nullptr;
-            Serial.println("User destravou a transferência");
+            logger.logInfo("User destravou a transferência");
         }
     }
 
@@ -105,12 +105,12 @@ void WebserverManager::onMqttMessage(char *topic, byte *payload, unsigned int le
         if (message == "active")
         {
             SetWaitForSync(true);
-            Serial.println("Aguarda sincronização");
+            logger.logInfo("Aguarda sincronização");
         }
         else if (message == "inactive")
         {
             SetWaitForSync(false);
-            Serial.println("Não aguarda sincronização");
+            logger.logInfo("Não aguarda sincronização");
         }
     }
 
@@ -170,19 +170,19 @@ void WebserverManager::onMqttMessage(char *topic, byte *payload, unsigned int le
 
 void WebserverManager::subscribeAllMqttTopics()
 {
-    mqttClient.subscribe("casa/bms/set");
-    mqttClient.subscribe("casa/power_source/set");
-    mqttClient.subscribe("casa/locked_to_source/set");
-    mqttClient.subscribe("casa/wait_for_sync/set");
-    mqttClient.subscribe("casa/voltage_calibration_sol/set");
-    mqttClient.subscribe("casa/voltage_calibration_uti/set");
-    mqttClient.subscribe("casa/voltage_offset_utility/set");
-    mqttClient.subscribe("casa/voltage_offset_solar/set");
-    mqttClient.subscribe("casa/firmware_utility_check/set");
-    mqttClient.subscribe("casa/battery_voltage_solar/set");
-    mqttClient.subscribe("casa/battery_voltage_utility/set");
-    mqttClient.subscribe("casa/battery_percentage_solar/set");
-    mqttClient.subscribe("casa/battery_percentage_utility/set");
+    mqttManager.subscribe("casa/bms/set");
+    mqttManager.subscribe("casa/power_source/set");
+    mqttManager.subscribe("casa/locked_to_source/set");
+    mqttManager.subscribe("casa/wait_for_sync/set");
+    mqttManager.subscribe("casa/voltage_calibration_sol/set");
+    mqttManager.subscribe("casa/voltage_calibration_uti/set");
+    mqttManager.subscribe("casa/voltage_offset_utility/set");
+    mqttManager.subscribe("casa/voltage_offset_solar/set");
+    mqttManager.subscribe("casa/firmware_utility_check/set");
+    mqttManager.subscribe("casa/battery_voltage_solar/set");
+    mqttManager.subscribe("casa/battery_voltage_utility/set");
+    mqttManager.subscribe("casa/battery_percentage_solar/set");
+    mqttManager.subscribe("casa/battery_percentage_utility/set");
 }
 
 void WebserverManager::NotifyClients(const String &message)
@@ -203,49 +203,12 @@ bool WebserverManager::HasWsClients()
 void WebserverManager::SendToMqtt(const char *topic, const char *message)
 {
     // Do not attempt a blocking reconnect here. If disconnected, log and drop message.
-    if (!mqttClient.connected())
+    if (!mqttManager.connected())
     {
-        Serial.println("MQTT não conectado - mensagem não enviada");
+        logger.logError("MQTT não conectado - mensagem não enviada");
         return;
     }
-    mqttClient.publish(topic, message, true);
-}
-
-void WebserverManager::LoopMqtt()
-{
-    // Service mqtt client
-    mqttClient.loop();
-
-    // If disconnected and WiFi is available, try reconnecting occasionally
-    if (!mqttClient.connected())
-    {
-        if (WiFi.status() == WL_CONNECTED)
-        {
-            attemptMqttReconnect();
-        }
-    }
-}
-
-void WebserverManager::attemptMqttReconnect()
-{
-    unsigned long now = millis();
-    if (now - lastMqttReconnectAttempt < mqttReconnectIntervalMs)
-    {
-        return; // respect interval
-    }
-
-    lastMqttReconnectAttempt = now;
-
-    Serial.println("Tentando reconectar ao MQTT...");
-    if (mqttClient.connect(MQTT_ID, MQTT_USER, MQTT_PASSWORD))
-    {
-        Serial.println("Reconectado ao MQTT");
-        subscribeAllMqttTopics();
-    }
-    else
-    {
-        Serial.println("Falha ao reconectar ao MQTT");
-    }
+    mqttManager.publish(topic, message, true);
 }
 
 void WebserverManager::SetWaitForSync(bool wait)
@@ -268,6 +231,8 @@ WebserverManager::WebserverManager(
     ScreenManager &pScreenManager,
     ScreenUpdate &pScreenUpdate,
     EnergySource **pUserDefinedSource,
+    MQTTManager &pMqttManager,
+    Logger &pLogger,
     bool *pUserSourceLocked,
     bool *pUpdatingFirmware,
     bool &pWaitForSync,
@@ -276,15 +241,12 @@ WebserverManager::WebserverManager(
     bool &pFirmwareUpdateUtilityOn
 )
     : utilitySource(pUtilitySource), solarSource(pSolarSource), battery(pBattery), screenManager(pScreenManager),
-      screenUpdate(pScreenUpdate), server(80), websocket("/ws"), events("/events"), mqttClient(client), waitForSync(pWaitForSync),
+      screenUpdate(pScreenUpdate), server(80), websocket("/ws"), events("/events"), mqttManager(pMqttManager), logger(pLogger), waitForSync(pWaitForSync),
       configPreferences(pConfigPreferences), inactivityTime(pInactivityTime), firmwareUpdateUtilityOn(pFirmwareUpdateUtilityOn)
 {
     userDefinedSource = pUserDefinedSource;
     userSourceLocked = pUserSourceLocked;
     updatingFirmware = pUpdatingFirmware;
-    // init mqtt reconnect helpers
-    lastMqttReconnectAttempt = 0;
-    mqttReconnectIntervalMs = 5000; // try every 5s
 }
 
 void WebserverManager::Init()
@@ -425,7 +387,7 @@ void WebserverManager::Init()
             if (!index)
             {
                 // Inicia a atualização OTA no início do upload
-                Serial.println("Iniciando upload...");
+                logger.logInfo("Iniciando upload...");
 
                 if (firmwareUpdateUtilityOn && !utilitySource.IsOnline())
                 {
@@ -445,14 +407,14 @@ void WebserverManager::Init()
 
                 unsigned long fileSize = request->contentLength();
 
-                Serial.println(fileSize);
+                logger.logInfoF("Tamanho do arquivo: %lu bytes", fileSize);
                 // esp_task_wdt_delete(NULL); //wathdog
                 screenUpdate.SetFirmwareSize(fileSize);
                 screenManager.GoToScreen(&screenUpdate);
 
                 if (!Update.begin(UPDATE_SIZE_UNKNOWN))
                 {
-                    Serial.println("Falha ao iniciar a atualização.");
+                    logger.logError("Falha ao iniciar a atualização.");
                     String html = String(form_action_html);
                     html = setMenuEnabled(html, MenuList::ABOUT);
                     html.replace("Salvo com sucesso", "Falha ao iniciar a atualização!");
@@ -469,7 +431,7 @@ void WebserverManager::Init()
             //   Escreve os dados recebidos na memória flash
             if (Update.write(data, len) != len)
             {
-                Serial.println("Falha ao gravar dados na flash.");
+                logger.logError("Falha ao gravar dados na flash.");
                 Update.abort();
                 request->send(500, "text/html", "Falha ao gravar dados na flash.");
                 // Fecha a conexão para interromper qualquer transferência em andamento
@@ -487,14 +449,14 @@ void WebserverManager::Init()
                 // Finaliza a atualização no fim do upload
                 if (Update.end(true))
                 {
-                    Serial.printf("Atualização concluída: %u bytes\n", index + len);
+                    logger.logInfoF("Atualização concluída: %u bytes", index + len);
                     screenUpdate.SetFirmwareSize(index + len);
                     screenUpdate.PrintProgress();
                     screenUpdate.SetRestart(true);
                 }
                 else
                 {
-                    Serial.println("Falha ao finalizar a atualização.");
+                    logger.logError("Falha ao finalizar a atualização.");
                     Update.abort();
                     request->send(500, "text/html", "Falha ao finalizar a atualização.");
                     // Fecha a conexão para interromper qualquer transferência em andamento
@@ -511,9 +473,9 @@ void WebserverManager::Init()
                       { onWsEvent(s, c, type, arg, data, len); });
     server.addHandler(&websocket);
 
-    events.onConnect([](AsyncEventSourceClient *client) {
+    events.onConnect([&](AsyncEventSourceClient *client) {
         if(client->lastId()){
-          Serial.printf("Client reconnected! Last message ID that it gat is: %u\n", client->lastId());
+          logger.logInfoF("Client reconnected! Last message ID that it gat is: %u", client->lastId());
         }
         //send event with message "hello!", id current millis
         // and set reconnect delay to 1 second
@@ -526,23 +488,20 @@ void WebserverManager::Init()
     // Configura o mDNS com o nome "meuesp.local"
     if (!MDNS.begin("atsthiaged"))
     {
-        Serial.println("Erro ao iniciar mDNS");
+        logger.logError("Erro ao iniciar mDNS");
         return;
     }
-    Serial.println("mDNS iniciado com sucesso! Acesse: http://atsthiaged.local");
+    logger.logInfo("mDNS iniciado com sucesso! Acesse: http://atsthiaged.local");
 
-    mqttClient.setServer("homeassistant.local", 1883);
-    mqttClient.setCallback([this](char *topic, byte *payload, unsigned int length)
-                           { onMqttMessage(topic, payload, length); });
-    mqttClient.connect(MQTT_ID, MQTT_USER, MQTT_PASSWORD);
-    if (mqttClient.connected())
-    {
-        Serial.println("Conectado ao MQTT");
+    mqttManager.setCallback([this](char* topic, byte* payload, unsigned int length) {
+        onMqttMessage(topic, payload, length);
+    });
+
+    if (mqttManager.connect()) {
         subscribeAllMqttTopics();
-    }
-    else
-    {
-        Serial.println("Falha ao conectar ao MQTT");
+        logger.logInfo("Conectado ao MQTT via MQTTManager");
+    } else {
+        logger.logError("Falha ao conectar ao MQTT");
     }
 
 }

@@ -393,8 +393,6 @@ void loop() {
         }
     }
 
-    mqttManager.loop();
-
     delay(60);
 }
 

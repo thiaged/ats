@@ -14,7 +14,7 @@
 #define LOG_MQTT_TOPIC "casa/logs/message"
 
 struct MQTTMessage {
-    char topic[128];
+    char topic[64];
     char payload[256];
     bool retained;
 };

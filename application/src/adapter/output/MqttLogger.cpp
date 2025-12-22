@@ -1,5 +1,4 @@
 #include <adapter/output/MqttLogger.h>
-#include "MqttLogger.h"
 
 MQTTLogger::MQTTLogger(LogLevel level, MQTTManager& pMqttManager)
     : Logger(level), mqttManager(pMqttManager)

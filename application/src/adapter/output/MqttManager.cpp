@@ -117,30 +117,24 @@ void MQTTManager::funcMqttTask()
     while (true)
     {
         if (!initialized) {
-            vTaskDelay(50 / portTICK_PERIOD_MS);
+            vTaskDelay(pdMS_TO_TICKS(20));
             continue;
         }
 
-        if (WiFi.status() != WL_CONNECTED) {
-            // WiFi não conectado, descarta a mensagem
-            vTaskDelay(50 / portTICK_PERIOD_MS);
-            continue;
-        }
+        loop();
 
         if (!connected())
         {
-            vTaskDelay(50 / portTICK_PERIOD_MS);
+            vTaskDelay(pdMS_TO_TICKS(20));
             continue;
         }
 
         MQTTMessage msg;
-        if (xQueueReceive(mqttQueue, &msg, pdMS_TO_TICKS(100)) == pdTRUE) {
-            if (mqttClient.connected()) {
-                mqttClient.publish(msg.topic, msg.payload, msg.retained);
-            }
+        if (xQueueReceive(mqttQueue, &msg, 0) == pdTRUE) {
+            mqttClient.publish(msg.topic, msg.payload, msg.retained);
         }
 
-        vTaskDelay(50 / portTICK_PERIOD_MS);
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
 
@@ -153,7 +147,7 @@ void MQTTManager::mqttTask(void *pvParameters)
 void MQTTManager::StartMqttTask()
 {
     // Cria a fila com capacidade para 100 mensagens de log
-    mqttQueue = xQueueCreate(30, sizeof(MQTTMessage));
+    mqttQueue = xQueueCreate(120, sizeof(MQTTMessage));
 
     // Inicia a tarefa de log
     xTaskCreatePinnedToCore(

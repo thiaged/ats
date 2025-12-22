@@ -57,7 +57,7 @@ void DrawManager::funcDrawTask()
             cmd.sprite->deleteSprite();
         }
 
-        vTaskDelay(10 / portTICK_PERIOD_MS); // Delay para evitar uso excessivo da CPU
+        // vTaskDelay(10 / portTICK_PERIOD_MS); // Delay para evitar uso excessivo da CPU
     }
 }
 
@@ -69,8 +69,8 @@ void DrawManager::drawTask(void *pvParameters)
 
 void DrawManager::StartDrawTask()
 {
-    // Cria a fila com capacidade para 40 comandos de desenho
-    drawQueue = xQueueCreate(40, sizeof(DrawCommand));
+    // Cria a fila com capacidade para 100 comandos de desenho
+    drawQueue = xQueueCreate(100, sizeof(DrawCommand));
     Serial.println("fila de desenho criada");
 
     // Inicia a tarefa de desenho

@@ -101,10 +101,11 @@ void BatterySource::parseCellVoltages(const byte* data, int length, int offset)
     // ⭐ LER O BYTE DE COMPRIMENTO CORRETAMENTE ⭐
     uint8_t dataLength = data[offset]; // offset já chega 1 a frente do ID (0x79)
     dataSizes[REG_CELL_VOLTAGES] = dataLength; // Armazenar para avançar no parsing principal
+    int numCells = dataLength / 3; // Cada célula usa 3 bytes
 
-    if (dataLength == 0 || dataLength > 72 || dataLength % 3 != 0) {
+    if (numCells != batteryCellsNumber) {
         dataSizes[REG_CELL_VOLTAGES] = 0;
-        logger.logWarningF("⚠️ Comprimento inválido no registrador 0x79: %d", dataLength);
+        logger.logWarningF("⚠️ Comprimento inválido no registrador 0x79: %d cells", numCells);
         return;
     }
 
@@ -116,7 +117,6 @@ void BatterySource::parseCellVoltages(const byte* data, int length, int offset)
         return;
     }
 
-    int numCells = dataLength / 3; // Cada célula usa 3 bytes
     logger.logInfoF("🔋 Processando %d células (comprimento=%d)\n", numCells, dataLength);
 
     // ⭐ POSIÇÃO CORRETA PARA INÍCIO DOS DADOS ⭐
@@ -360,7 +360,7 @@ void BatterySource::Init()
     configPreferences.end();
 
     // Cria a fila (pode armazenar 1 buffer por vez)
-    bmsResponseQueue = xQueueCreate(1, sizeof(BmsResponseItem));
+    bmsResponseQueue = xQueueCreate(5, sizeof(BmsResponseItem));
     if (bmsResponseQueue == NULL) {
         logger.logError("Falha ao criar fila BMS");
     }

@@ -90,6 +90,7 @@ private:
     DynamicAnalogBuffer &batteryReadBuffer;
     float batteryConfig = 1.634;
     Logger &logger;
+    u8_t batteryCellsNumber = 8;
     double batteryConfigMin = 23.50;
     unsigned int batteryConfigMinPercentage = 40;
     unsigned int batteryConfigMaxPercentage = 60;

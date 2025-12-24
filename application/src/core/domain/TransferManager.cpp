@@ -208,7 +208,7 @@ void TransferManager::funcNoBreakTask(void *pvParameters)
         noBreakLastHeartbeat = millis();
         if (transfering == true || *updatingFirmware == true)
         {
-            logger.logWarning("update while transferring");
+            logger.logWarning("update or transferring in progress, skipping nobreak checks");
             vTaskDelay(10 / portTICK_PERIOD_MS);
             continue;
         }

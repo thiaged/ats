@@ -126,26 +126,26 @@ private:
     bool bmsProcessing = false;
 
     // --- JUMP TABLE ---
-    using ParserFunc = void (BatterySource::*)(const byte* data, int length, int offset);
+    using ParserFunc = bool (BatterySource::*)(const byte* data, int length, int offset, BMSData& stagedBMS);
     static constexpr int JUMP_TABLE_SIZE = 256;
     ParserFunc jumpTable[JUMP_TABLE_SIZE] = {nullptr};
     uint8_t dataSizes[JUMP_TABLE_SIZE] = {0};
 
     // Funções de parsing específicas
-    void parseCellVoltages(const byte* data, int length, int offset);
-    void parseTemperature(const byte* data, int length, int offset, float& target);
-    void parseMosTemp(const byte* data, int length, int offset);
-    void parseBatteryT1(const byte* data, int length, int offset);
-    void parseBatteryT2(const byte* data, int length, int offset);
-    void parseTotalVoltage(const byte* data, int length, int offset);
-    void parseCurrent(const byte* data, int length, int offset);
-    void parseSOC(const byte* data, int length, int offset);
-    void parseTotalStrings(const byte* data, int length, int offset);
-    void parseNumNTC(const byte* data, int length, int offset);
-    void parseCycleCount(const byte* data, int length, int offset);
-    void parseBatteryCapacity(const byte* data, int length, int offset);
-    void parseWarnMessages(const byte* data, int length, int offset);
-    void parseUnknown(const byte* data, int length, int offset);
+    bool parseCellVoltages(const byte* data, int length, int offset, BMSData& stagedBMS);
+    bool parseTemperature(const byte* data, int length, int offset, float& target);
+    bool parseMosTemp(const byte* data, int length, int offset, BMSData& stagedBMS);
+    bool parseBatteryT1(const byte* data, int length, int offset, BMSData& stagedBMS);
+    bool parseBatteryT2(const byte* data, int length, int offset, BMSData& stagedBMS);
+    bool parseTotalVoltage(const byte* data, int length, int offset, BMSData& stagedBMS);
+    bool parseCurrent(const byte* data, int length, int offset, BMSData& stagedBMS);
+    bool parseSOC(const byte* data, int length, int offset, BMSData& stagedBMS);
+    bool parseTotalStrings(const byte* data, int length, int offset, BMSData& stagedBMS);
+    bool parseNumNTC(const byte* data, int length, int offset, BMSData& stagedBMS);
+    bool parseCycleCount(const byte* data, int length, int offset, BMSData& stagedBMS);
+    bool parseBatteryCapacity(const byte* data, int length, int offset, BMSData& stagedBMS);
+    bool parseWarnMessages(const byte* data, int length, int offset, BMSData& stagedBMS);
+    bool parseUnknown(const byte* data, int length, int offset, BMSData& stagedBMS);
 
     void initializeJumpTable();
 

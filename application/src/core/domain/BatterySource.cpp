@@ -82,20 +82,19 @@ void BatterySource::initializeJumpTable()
     }
 }
 
-void BatterySource::parseCellVoltages(const byte* data, int length, int offset)
+bool BatterySource::parseCellVoltages(const byte* data, int length, int offset, BMSData& stagedBMS)
 {
     float highestCellVoltage = 0.0;
     float lowestCellVoltage = 100.0;
 
     // Resetar índices antes de processar
-    BMS.highestCellIndex = -1;
-    BMS.lowestCellIndex = -1;
+    stagedBMS.highestCellIndex = -1;
+    stagedBMS.lowestCellIndex = -1;
 
     // Verificação de segurança: garantir que há espaço para o comprimento
     if (offset + 1 >= length) {
-        dataSizes[REG_CELL_VOLTAGES] = 0;
         logger.logWarning("⚠️ Buffer insuficiente para ler comprimento das células");
-        return;
+        return false;
     }
 
     // ⭐ LER O BYTE DE COMPRIMENTO CORRETAMENTE ⭐
@@ -104,17 +103,15 @@ void BatterySource::parseCellVoltages(const byte* data, int length, int offset)
     int numCells = dataLength / 3; // Cada célula usa 3 bytes
 
     if (numCells != batteryCellsNumber) {
-        dataSizes[REG_CELL_VOLTAGES] = 0;
         logger.logWarningF("⚠️ Comprimento inválido no registrador 0x79: %d cells", numCells);
-        return;
+        return false;
     }
 
     // Verificar se há dados suficientes
-    if (offset + 1 + dataLength > length) { // +2: ID + comprimento
-        dataSizes[REG_CELL_VOLTAGES] = 0;
+    if (offset + 1 + dataLength > length) {
         logger.logWarningF("⚠️ Dados insuficientes para células: precisa %d, tem %d\n",
                          offset + 2 + dataLength, length);
-        return;
+        return false;
     }
 
     logger.logInfoF("🔋 Processando %d células (comprimento=%d)\n", numCells, dataLength);
@@ -133,211 +130,266 @@ void BatterySource::parseCellVoltages(const byte* data, int length, int offset)
         if (cellId >= 1 && cellId <= 24) {
             float voltage = rawVoltage / 1000.0; // Converter para volts
 
-            // Validação de tensão realista (2.5V - 4.2V para LiFePO4)
-            if (voltage >= 2.0 && voltage <= 5.0) {
-                BMS.cellVoltages[cellId] = voltage;
+            // Validação de tensão realista (0.0V - 5.0V para LiFePO4)
+            if (voltage >= 0.0 && voltage <= 5.0) {
+                stagedBMS.cellVoltages[cellId] = voltage;
 
                 // Atualizar célula mais alta
-                if (BMS.highestCellIndex == -1 || voltage > highestCellVoltage) {
+                if (stagedBMS.highestCellIndex == -1 || voltage > highestCellVoltage) {
                     highestCellVoltage = voltage;
-                    BMS.highestCellIndex = cellId;
+                    stagedBMS.highestCellIndex = cellId;
                 }
 
                 // Atualizar célula mais baixa
-                if (BMS.lowestCellIndex == -1 || voltage < lowestCellVoltage) {
+                if (stagedBMS.lowestCellIndex == -1 || voltage < lowestCellVoltage) {
                     lowestCellVoltage = voltage;
-                    BMS.lowestCellIndex = cellId;
+                    stagedBMS.lowestCellIndex = cellId;
                 }
             } else {
                 logger.logWarningF("  ⚠️ Tensão inválida na célula %d: %.3f V\n",
                              cellId, voltage);
+                return false;
             }
         } else {
             logger.logWarningF("  ⚠️ ID de célula inválido: %d\n", cellId);
+            return false;
         }
 
         j += 3; // Avançar para próxima célula (3 bytes por célula)
     }
 
+    return true;
 }
 
-void BatterySource::parseTemperature(const byte* data, int length, int offset, float& target)
+bool BatterySource::parseTemperature(const byte* data, int length, int offset, float& target)
 {
-    if (offset + 1 < length) {
-        uint8_t rawTemp = data[offset + 1];
-        // Conversão segundo protocolo: valores acima de 100 são negativos
-        float temperature;
-        if (rawTemp > 100) {
-            temperature = -(rawTemp - 100);
-        } else {
-            temperature = 100 - rawTemp;
-        }
-        target = temperature - 40; // Ajuste para a faixa correta
+    if (offset + 1 >= length) {
+        logger.logWarning("⚠️ Dados insuficientes para ler temperatura");
+        return false;
     }
+
+    uint8_t rawTemp = data[offset + 1];
+    // Conversão segundo protocolo: valores acima de 100 são negativos
+    float temperature = rawTemp;
+    if (rawTemp > 100) {
+        temperature = 100 - rawTemp;
+    }
+
+    target = temperature;
+
+    return true;
 }
 
-void BatterySource::parseMosTemp(const byte* data, int length, int offset)
+bool BatterySource::parseMosTemp(const byte* data, int length, int offset, BMSData& stagedBMS)
 {
-    parseTemperature(data, length, offset, BMS.mosTemp);
+    return parseTemperature(data, length, offset, stagedBMS.mosTemp);
 }
 
-void BatterySource::parseBatteryT1(const byte* data, int length, int offset)
+bool BatterySource::parseBatteryT1(const byte* data, int length, int offset, BMSData& stagedBMS)
 {
-    parseTemperature(data, length, offset, BMS.batteryT1);
+    return parseTemperature(data, length, offset, stagedBMS.batteryT1);
 }
 
-void BatterySource::parseBatteryT2(const byte* data, int length, int offset)
+bool BatterySource::parseBatteryT2(const byte* data, int length, int offset, BMSData& stagedBMS)
 {
-    parseTemperature(data, length, offset, BMS.batteryT2);
+    return parseTemperature(data, length, offset, stagedBMS.batteryT2);
 }
 
-void BatterySource::parseTotalVoltage(const byte *data, int length, int offset)
+bool BatterySource::parseTotalVoltage(const byte *data, int length, int offset, BMSData& stagedBMS)
 {
-    if (offset + dataSizes[REG_TOTAL_VOLTAGE] < length)
+    if (offset + dataSizes[REG_TOTAL_VOLTAGE] > length) {
+        logger.logWarning("⚠️ Dados insuficientes para ler tensão total");
+        return false;
+    }
+
+    uint16_t rawValue = (data[offset] << 8) | data[offset + 1];
+    double voltage = rawValue / 100.0;
+    if (
+        voltage > batteryVoltageMin &&
+        voltage < batteryVoltageMax)
     {
-        uint16_t rawValue = (data[offset] << 8) | data[offset + 1];
-        double voltage = rawValue / 100.0;
-        if (
-            voltage > batteryVoltageMin &&
-            voltage < batteryVoltageMax)
-        {
-            BMS.totalVoltage = voltage;
-        } else {
-            logger.logWarningF("⚠️ Tensão total inválida: %.2f V", voltage);
-        }
-    }
-}
-
-void BatterySource::parseCurrent(const byte* data, int length, int offset)
-{
-    if (offset + dataSizes[REG_CURRENT] < length) {
-        uint16_t rawValue = (data[offset] << 8) | data[offset + 1];
-        bool isCharging = (rawValue & 0x8000) != 0;
-        uint16_t magnitude = rawValue & 0x7FFF;
-        isCharging = (magnitude != 0) ? isCharging : false; // Se magnitude for 0, força isCharging para false
-        double current = (isCharging ? 1.0 : -1.0) * magnitude * 0.01;
-        if (current > -200.0 && current < 200.0) {
-            BMS.current = current;
-            BMS.power = BMS.totalVoltage * BMS.current;
-        }
-    }
-}
-
-void BatterySource::parseSOC(const byte* data, int length, int offset)
-{
-    if (offset + dataSizes[REG_RESIDUAL_CAPACITY] < length) {
-        int soc = data[offset];
-        if (soc <= 100) {
-            if (BMS.soc == 0 || abs(soc - BMS.soc) < 5) {
-                BMS.soc = soc;
-                bmsComunicationFailures = 0;
-            } else {
-                bmsComunicationFailures++;
-            }
-        }
-    }
-}
-
-void BatterySource::parseTotalStrings(const byte* data, int length, int offset)
-{
-    if (offset + dataSizes[REG_TOTAL_STRINGS] < length) {
-        uint16_t numCells = (data[offset] << 8) | data[offset + 1];
-        logger.logInfoF("🔋 Número de células detectadas: %d\n", numCells);
-
-        if(numCells <= 24) BMS.totalStrings = numCells;
+        stagedBMS.totalVoltage = voltage;
     } else {
-        logger.logWarning("⚠️ Dados insuficientes para ler número de células");
+        logger.logWarningF("⚠️ Tensão total inválida: %.2f V", voltage);
+        return false;
     }
+
+    return true;
 }
 
-void BatterySource::parseNumNTC(const byte* data, int length, int offset)
+bool BatterySource::parseCurrent(const byte* data, int length, int offset, BMSData& stagedBMS)
 {
-    if (offset + dataSizes[REG_NUM_NTC] < length) {
-        uint8_t numNtc = data[offset];
-        // Armazena o número de sensores NTC (termistores)
-        // O protocolo especifica que este valor geralmente é 2 (dois sensores de temperatura)
-        BMS.numNTC = numNtc;
+    if (offset + dataSizes[REG_CURRENT] > length) {
+        logger.logWarning("⚠️ Dados insuficientes para ler corrente");
+        return false;
     }
+
+    uint16_t rawValue = (data[offset] << 8) | data[offset + 1];
+    bool isCharging = (rawValue & 0x8000) != 0;
+    uint16_t magnitude = rawValue & 0x7FFF;
+    isCharging = (magnitude != 0) ? isCharging : false; // Se magnitude for 0, força isCharging para false
+    double current = (isCharging ? 1.0 : -1.0) * magnitude * 0.01;
+    if (current > -200.0 && current < 200.0) {
+        stagedBMS.current = current;
+        stagedBMS.power = stagedBMS.totalVoltage * stagedBMS.current;
+    }
+    else {
+        logger.logWarningF("⚠️ Corrente inválida: %.2f A", current);
+        return false;
+    }
+
+    return true;
 }
 
-void BatterySource::parseCycleCount(const byte* data, int length, int offset)
+bool BatterySource::parseSOC(const byte* data, int length, int offset, BMSData& stagedBMS)
 {
-    if (offset + dataSizes[REG_CYCLE_COUNT] < length) {
-        uint16_t cycleCount = (data[offset] << 8) | data[offset + 1];
-        // Armazena o número de ciclos de carga/descarga completos
-        BMS.cycleCount = cycleCount;
+
+    if (offset + dataSizes[REG_RESIDUAL_CAPACITY] > length) {
+        logger.logWarning("⚠️ Dados insuficientes para ler SOC");
+        return false;
     }
-}
 
-void BatterySource::parseBatteryCapacity(const byte* data, int length, int offset)
-{
-    if (offset + dataSizes[REG_BATTERY_CAPACITY] + 3 < length) {
-        // Lê 4 bytes para a capacidade total da bateria em Ah
-        uint32_t capacityRaw = (uint32_t)data[offset] << 24 |
-                              (uint32_t)data[offset + 1] << 16 |
-                              (uint32_t)data[offset + 2] << 8 |
-                              (uint32_t)data[offset + 3];
-
-        // Converte para valor em Ah (float)
-        // O protocolo não especifica a escala exata, mas geralmente é em mAh ou Ah
-        // Considerando que é provavelmente em mAh:
-        BMS.batteryCapacity = capacityRaw / 1000.0; // converte para Ah
-    }
-}
-
-void BatterySource::parseWarnMessages(const byte* data, int length, int offset)
-{
-    if (offset + dataSizes[REG_WARN_MESSAGES] < length) {
-        uint16_t warningFlags = (data[offset] << 8) | data[offset + 1];
-
-        // Armazena as flags brutas para análise posterior
-        BMS.warningFlags = warningFlags;
-
-        // Análise detalhada dos bits de aviso conforme protocolo
-        bool lowCapacityAlarm = (warningFlags & 0x0001) != 0;       // Bit 0
-        bool mosOvertempAlarm = (warningFlags & 0x0002) != 0;       // Bit 1
-        bool chargeOvervoltageAlarm = (warningFlags & 0x0004) != 0; // Bit 2
-        bool dischargeUndervoltageAlarm = (warningFlags & 0x0008) != 0; // Bit 3
-        bool batteryOvertempAlarm = (warningFlags & 0x0010) != 0;   // Bit 4
-        bool chargeOvercurrentAlarm = (warningFlags & 0x0020) != 0; // Bit 5
-        bool dischargeOvercurrentAlarm = (warningFlags & 0x0040) != 0; // Bit 6
-        bool cellVoltageDiffAlarm = (warningFlags & 0x0080) != 0;   // Bit 7
-        bool boxOvertempAlarm = (warningFlags & 0x0100) != 0;       // Bit 8
-        bool batteryLowtempAlarm = (warningFlags & 0x0200) != 0;    // Bit 9
-        bool cellOvervoltageAlarm = (warningFlags & 0x0400) != 0;   // Bit 10
-        bool cellUndervoltageAlarm = (warningFlags & 0x0800) != 0;  // Bit 11
-        bool protection309A = (warningFlags & 0x1000) != 0;         // Bit 12
-        bool protection309B = (warningFlags & 0x2000) != 0;         // Bit 13
-
-        // Monta uma string descritiva dos alarmes ativos para debug
-        String warnings = "";
-        if (lowCapacityAlarm) warnings += "LowCapacity ";
-        if (mosOvertempAlarm) warnings += "MOSOvertemp ";
-        if (chargeOvervoltageAlarm) warnings += "ChargeOvervolt ";
-        if (dischargeUndervoltageAlarm) warnings += "DischargeUndervolt ";
-        if (batteryOvertempAlarm) warnings += "BattOvertemp ";
-        if (chargeOvercurrentAlarm) warnings += "ChargeOvercurrent ";
-        if (dischargeOvercurrentAlarm) warnings += "DischargeOvercurrent ";
-        if (cellVoltageDiffAlarm) warnings += "CellVoltageDiff ";
-        if (boxOvertempAlarm) warnings += "BoxOvertemp ";
-        if (batteryLowtempAlarm) warnings += "BattLowtemp ";
-        if (cellOvervoltageAlarm) warnings += "CellOvervoltage ";
-        if (cellUndervoltageAlarm) warnings += "CellUndervoltage ";
-        if (protection309A) warnings += "309A_Protection ";
-        if (protection309B) warnings += "309B_Protection ";
-
-        if (warnings.length() > 0) {
-            logger.logWarningF("⚠️ BMS Warnings: %s", warnings.c_str());
+    int soc = data[offset];
+    if (soc <= 100) {
+        if (stagedBMS.soc == 0 || abs(soc - stagedBMS.soc) < 5) {
+            stagedBMS.soc = soc;
+        } else {
+            logger.logWarningF("⚠️ Variação abrupta de SOC detectada: %d%% para %d%%", stagedBMS.soc, soc);
+            return false;
         }
-
-        // Define se há algum alarme ativo
-        BMS.hasWarnings = (warningFlags != 0);
     }
+
+    return true;
 }
 
-void BatterySource::parseUnknown(const byte* data, int length, int offset)
+bool BatterySource::parseTotalStrings(const byte* data, int length, int offset, BMSData& stagedBMS)
 {
-    // ignore
+    if (offset + dataSizes[REG_TOTAL_STRINGS] > length) {
+        logger.logWarning("⚠️ Dados insuficientes para ler número de strings");
+        return false;
+    }
+
+    uint16_t numCells = (data[offset] << 8) | data[offset + 1];
+    logger.logInfoF("🔋 Número de células detectadas: %d\n", numCells);
+
+    if(numCells == batteryCellsNumber) {
+        stagedBMS.totalStrings = numCells;
+    } else {
+        logger.logWarningF("⚠️ Número de células inválido %d", numCells);
+        return false;
+    }
+
+    return true;
+}
+
+bool BatterySource::parseNumNTC(const byte* data, int length, int offset, BMSData& stagedBMS)
+{
+    if (offset + dataSizes[REG_NUM_NTC] > length) {
+        logger.logWarning("⚠️ Dados insuficientes para ler número de sensores NTC");
+        return false;
+    }
+
+    uint8_t numNtc = data[offset];
+    // Armazena o número de sensores NTC (termistores)
+    // O protocolo especifica que este valor geralmente é 2 (dois sensores de temperatura)
+    stagedBMS.numNTC = numNtc;
+
+    return true;
+}
+
+bool BatterySource::parseCycleCount(const byte* data, int length, int offset, BMSData& stagedBMS)
+{
+    if (offset + dataSizes[REG_CYCLE_COUNT] > length) {
+        logger.logWarning("⚠️ Dados insuficientes para ler número de ciclos");
+        return false;
+    }
+
+    uint16_t cycleCount = (data[offset] << 8) | data[offset + 1];
+    // Armazena o número de ciclos de carga/descarga completos
+    stagedBMS.cycleCount = cycleCount;
+
+    return true;
+}
+
+bool BatterySource::parseBatteryCapacity(const byte* data, int length, int offset, BMSData& stagedBMS)
+{
+    if (offset + dataSizes[REG_BATTERY_CAPACITY] + 3 > length) {
+        logger.logWarning("⚠️ Dados insuficientes para ler capacidade da bateria");
+        return false;
+    }
+
+    // Lê 4 bytes para a capacidade total da bateria em Ah
+    uint32_t capacityRaw = (uint32_t)data[offset] << 24 |
+                          (uint32_t)data[offset + 1] << 16 |
+                          (uint32_t)data[offset + 2] << 8 |
+                          (uint32_t)data[offset + 3];
+
+    // Converte para valor em Ah (float)
+    // O protocolo não especifica a escala exata, mas geralmente é em mAh ou Ah
+    // Considerando que é provavelmente em mAh:
+    stagedBMS.batteryCapacity = capacityRaw / 1000.0; // converte para Ah
+
+    return true;
+}
+
+bool BatterySource::parseWarnMessages(const byte* data, int length, int offset, BMSData& stagedBMS)
+{
+    if (offset + dataSizes[REG_WARN_MESSAGES] > length) {
+        logger.logWarning("⚠️ Dados insuficientes para ler mensagens de aviso");
+        return false;
+    }
+
+    uint16_t warningFlags = (data[offset] << 8) | data[offset + 1];
+
+    // Armazena as flags brutas para análise posterior
+    stagedBMS.warningFlags = warningFlags;
+
+    // Análise detalhada dos bits de aviso conforme protocolo
+    bool lowCapacityAlarm = (warningFlags & 0x0001) != 0;       // Bit 0
+    bool mosOvertempAlarm = (warningFlags & 0x0002) != 0;       // Bit 1
+    bool chargeOvervoltageAlarm = (warningFlags & 0x0004) != 0; // Bit 2
+    bool dischargeUndervoltageAlarm = (warningFlags & 0x0008) != 0; // Bit 3
+    bool batteryOvertempAlarm = (warningFlags & 0x0010) != 0;   // Bit 4
+    bool chargeOvercurrentAlarm = (warningFlags & 0x0020) != 0; // Bit 5
+    bool dischargeOvercurrentAlarm = (warningFlags & 0x0040) != 0; // Bit 6
+    bool cellVoltageDiffAlarm = (warningFlags & 0x0080) != 0;   // Bit 7
+    bool boxOvertempAlarm = (warningFlags & 0x0100) != 0;       // Bit 8
+    bool batteryLowtempAlarm = (warningFlags & 0x0200) != 0;    // Bit 9
+    bool cellOvervoltageAlarm = (warningFlags & 0x0400) != 0;   // Bit 10
+    bool cellUndervoltageAlarm = (warningFlags & 0x0800) != 0;  // Bit 11
+    bool protection309A = (warningFlags & 0x1000) != 0;         // Bit 12
+    bool protection309B = (warningFlags & 0x2000) != 0;         // Bit 13
+
+    // Monta uma string descritiva dos alarmes ativos para debug
+    String warnings = "";
+    if (lowCapacityAlarm) warnings += "LowCapacity ";
+    if (mosOvertempAlarm) warnings += "MOSOvertemp ";
+    if (chargeOvervoltageAlarm) warnings += "ChargeOvervolt ";
+    if (dischargeUndervoltageAlarm) warnings += "DischargeUndervolt ";
+    if (batteryOvertempAlarm) warnings += "BattOvertemp ";
+    if (chargeOvercurrentAlarm) warnings += "ChargeOvercurrent ";
+    if (dischargeOvercurrentAlarm) warnings += "DischargeOvercurrent ";
+    if (cellVoltageDiffAlarm) warnings += "CellVoltageDiff ";
+    if (boxOvertempAlarm) warnings += "BoxOvertemp ";
+    if (batteryLowtempAlarm) warnings += "BattLowtemp ";
+    if (cellOvervoltageAlarm) warnings += "CellOvervoltage ";
+    if (cellUndervoltageAlarm) warnings += "CellUndervoltage ";
+    if (protection309A) warnings += "309A_Protection ";
+    if (protection309B) warnings += "309B_Protection ";
+
+    if (warnings.length() > 0) {
+        logger.logWarningF("⚠️ BMS Warnings: %s", warnings.c_str());
+    }
+
+    // Define se há algum alarme ativo
+    stagedBMS.hasWarnings = (warningFlags != 0);
+
+    return true;
+}
+
+bool BatterySource::parseUnknown(const byte* data, int length, int offset, BMSData& stagedBMS)
+{
+    return true;
 }
 
 void BatterySource::Init()
@@ -597,76 +649,6 @@ void BatterySource::checkConnectionTimeout()
     }
 }
 
-void BatterySource::processAllData(byte* buffer, int length)
-{
-    int headerPos = -1;
-    for (int i = 0; i < length - 1; i++) {
-        if (buffer[i] == 0x4E && buffer[i+1] == 0x57) {
-            headerPos = i;
-            break;
-        }
-    }
-
-    if (headerPos == -1) {
-        logger.logWarning("JK BMS header not found");
-        BMS.isConnected = false;
-        return;
-    }
-
-    if (headerPos + 2 >= length) {
-        logger.logWarning("Pacote muito curto após header");
-        BMS.isConnected = false;
-        return;
-    }
-
-    // Ler o campo de comprimento (bytes 2 e 3 após o header)
-    uint16_t packetLength = (buffer[headerPos + 2] << 8) | buffer[headerPos + 3];
-    int expectedTotalLength = headerPos + packetLength;
-
-    if (expectedTotalLength > length) {
-        logger.logWarningF("Pacote incompleto - esperado: %d, recebido: %d", expectedTotalLength, length);
-        BMS.isConnected = false;
-        return;
-    }
-
-    // --- VALIDAR CRC ---
-    if (!validateResponseCRC(buffer + headerPos, length - headerPos)) {
-        logger.logWarning("CRC validation failed - discarding response");
-        if (BMS.consecutiveCrcFailures >= 5) {
-            BMS.isConnected = false;
-            logger.logError("BMS disconnected after 5 consecutive CRC failures");
-        }
-        return;
-    }
-
-    int i = headerPos;
-    while (i < length) {
-
-        while (i < length && !addressValid[buffer[i]]) {
-            i++;
-        }
-
-        // Se chegou ao fim, sai
-        if (i >= length) break;
-        byte addr = buffer[i];
-
-        // --- JUMP TABLE: Acesso O(1) ---
-        if (addr < JUMP_TABLE_SIZE && jumpTable[addr] != nullptr) {
-            (this->*jumpTable[addr])(buffer, length, i);
-            // dataSizes stores the payload length. Advance by payload + 2 (addr + length fields)
-            i += dataSizes[addr] + 2;
-            if (addr == REG_WARN_MESSAGES) {
-                break; // Sai após ler as mensagens de aviso
-            }
-        } else {
-            i += 1;
-        }
-    }
-
-    BMS.lastResponseTime = millis();
-    BMS.isConnected = bmsComunicationOn;
-}
-
 // Getters (mantidos iguais)
 double BatterySource::GetBmsTotalVoltage() { return BMS.totalVoltage; }
 double BatterySource::GetBmsCurrent() { return BMS.current; }
@@ -867,6 +849,8 @@ void BatterySource::processBmsResponseAsync(byte* buffer, int length)
     }
 
     int pos = 11; // após: [4E 57][length 2][terminal 4][command 1][source 1][type 1]
+    bool parsedSuccessfully = true;
+    BMSData stagedBMS = BMS;
 
     while (pos < length - 3) { // espaço para footer+CRC
         uint8_t registerId = buffer[pos++];
@@ -878,7 +862,7 @@ void BatterySource::processBmsResponseAsync(byte* buffer, int length)
         uint8_t dataLength = 1;
 
         if (pos + dataLength > length - 3) {
-            logger.logWarningF("⚠️ Dados insuficientes para registrador 0x%02X\n", registerId);
+            logger.logWarningF("⚠️ Dados insuficientes para registrador 0x%02X\nPosição: %d, dataLength: %d, length: %d", registerId, pos, dataLength, length);
             BMS.consecutiveErrors++;
             if (BMS.consecutiveErrors >= 5) {
                 bmsComunicationOn = false;
@@ -891,22 +875,28 @@ void BatterySource::processBmsResponseAsync(byte* buffer, int length)
         }
 
         if (registerId < JUMP_TABLE_SIZE && jumpTable[registerId] != nullptr && isValidAddress(registerId)) {
-            (this->*jumpTable[registerId])(buffer, length, pos);
-            dataLength = dataSizes[registerId]; // Atualiza dataLength conforme o parsing
+            if (!(this->*jumpTable[registerId])(buffer, length, pos, stagedBMS)) {
+                parsedSuccessfully = false;
+                logger.logWarningF("⚠️ Parse inválido no registrador 0x%02X\n", registerId);
+                break;
+            }
+
+            dataLength = dataSizes[registerId];
+
             if (registerId == REG_WARN_MESSAGES) {
                 BMS.consecutiveErrors = 0; // Resetar erros após sucesso completo
                 break; // Sai após ler as mensagens de aviso
             }
         }
 
-        if (dataLength == 0) {
-            logger.logWarningF("⚠️ Comprimento inválido para registrador 0x%02X\n", registerId);
-            break;
-        }
-
         pos += dataLength;
     }
 
+    if (parsedSuccessfully) {
+        BMS = stagedBMS;
+    } else {
+        logger.logWarning("❌ Erro ao processar dados da BMS, mantendo dados anteriores");
+    }
     BMS.lastResponseTime = millis();
     BMS.isConnected = bmsComunicationOn;
     Serial.println("✅ Parsing assíncrono da BMS concluído com sucesso");

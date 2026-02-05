@@ -8,9 +8,9 @@
 #include <adapter/output/ScreenHome.h>
 #include <adapter/output/ScreenWave.h>
 #include <adapter/output/ScreenBMS.h>
+#include <adapter/output/ScreenSystemMetrics.h>
 #include <core/domain/SolarSource.h>
 #include <core/domain/UtilitySource.h>
-#include <memory>
 #include <adapter/input/EnergyInput.h>
 #include <core/domain/TransferManager.h>
 #include <adapter/output/BuzzerManager.h>
@@ -88,6 +88,8 @@ ScreenWave screenWave = ScreenWave(utilitySource, solarSource, &activeSource, &d
 ScreenBMS screenBMS = ScreenBMS(utilitySource, solarSource, &activeSource, &definedSource, &userDefinedSource, battery,
     drawManager, display, amoled, &userSourceLocked, configPreferences);
 ScreenUpdate screenUpdate = ScreenUpdate(utilitySource, solarSource, &activeSource, &definedSource, &userDefinedSource, battery,
+    drawManager, display, amoled, &userSourceLocked, configPreferences);
+ScreenSystemMetrics screenSystemMetrics = ScreenSystemMetrics(utilitySource, solarSource, &activeSource, &definedSource, &userDefinedSource, battery,
     drawManager, display, amoled, &userSourceLocked, configPreferences);
 
 WebserverManager serverManager = WebserverManager(utilitySource, solarSource, battery, screenManager, screenUpdate, &userDefinedSource,
@@ -192,6 +194,7 @@ void setup() {
     screenManager.AddScreen(std::unique_ptr<ScreenWave>(&screenWave));
     screenManager.AddScreen(std::unique_ptr<ScreenBMS>(&screenBMS));
     screenManager.AddScreen(std::unique_ptr<ScreenUpdate>(&screenUpdate));
+    screenManager.AddScreen(std::unique_ptr<ScreenSystemMetrics>(&screenSystemMetrics));
 
     buzzerManager.PlayInitSound();
 

@@ -175,6 +175,11 @@ bool BatterySource::parseTemperature(const byte* data, int length, int offset, f
         temperature = 100 - rawTemp;
     }
 
+    if (temperature == 0) {
+        logger.logWarning("⚠️ Temperatura lida como 0°C, valor inválido");
+        return false;
+    }
+
     target = temperature;
 
     return true;
@@ -810,6 +815,7 @@ void BatterySource::bmsParserTask(void *pvParameters)
             // Envia para processamento gradual
             instance->processBmsResponseAsync(item.buffer, item.length - 2); // Exclui os 2 bytes CRC finais
         }
+        vTaskDelay(60 / portTICK_PERIOD_MS);
     }
 }
 
@@ -894,9 +900,8 @@ void BatterySource::processBmsResponseAsync(byte* buffer, int length)
 
     if (parsedSuccessfully) {
         BMS = stagedBMS;
-    } else {
-        logger.logWarning("❌ Erro ao processar dados da BMS, mantendo dados anteriores");
     }
+
     BMS.lastResponseTime = millis();
     BMS.isConnected = bmsComunicationOn;
     Serial.println("✅ Parsing assíncrono da BMS concluído com sucesso");

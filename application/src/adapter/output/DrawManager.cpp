@@ -57,7 +57,7 @@ void DrawManager::funcDrawTask()
             cmd.sprite->deleteSprite();
         }
 
-        // vTaskDelay(10 / portTICK_PERIOD_MS); // Delay para evitar uso excessivo da CPU
+        vTaskDelay(5 / portTICK_PERIOD_MS); // Delay para evitar uso excessivo da CPU
     }
 }
 

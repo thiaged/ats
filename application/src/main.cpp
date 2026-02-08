@@ -124,10 +124,10 @@ bool ledBlink = 0;
 void checkFailures();
 
 void setup() {
-
     bool initiatedBoard = false;
     Serial.begin(115200);
     Serial.println("Starting...");
+
     delay(2000);
 
     // Inicializa a tela
@@ -461,13 +461,19 @@ void checkFailures()
         bool wait = true;
         uint32_t elapsedTime = millis();
 
+        ledcWrite(0, 153);  // Inicializa o buzzer com 50% de duty cycle
+        delay(300);
+        ledcWriteTone(0, 0);  // Desliga o buzzer
+
         while (wait)
         {
-            if ((millis() - elapsedTime) > 300000 && (millis() - elapsedTime) < 330000)
+            if ((millis() - elapsedTime) > 600000)
             {
                 ledcWrite(0, 153);  // Inicializa o buzzer com 50% de duty cycle
                 delay(300);
                 ledcWriteTone(0, 0);  // Desliga o buzzer
+
+                elapsedTime = millis();
             }
 
             ledBlink = !ledBlink;
